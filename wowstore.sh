@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.10"
+VERSION="1.11"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -24,8 +24,18 @@ RESET='\033[0m'
 
 # --- ARGUMENT PARSING ---
 FORCE_UPDATE=false
+
 if [[ "$1" == "-u" ]]; then
     FORCE_UPDATE=true
+elif [[ "$1" == "-r" ]]; then
+    echo -e "${M}Uninstalling wowstore from system...${RESET}"
+    if [ -f "/usr/local/bin/wowstore" ]; then
+        sudo rm /usr/local/bin/wowstore
+        echo -e "${G}Successfully removed /usr/local/bin/wowstore${RESET}"
+    else
+        echo -e "${Y}wowstore is not installed in /usr/local/bin${RESET}"
+    fi
+    exit 0
 fi
 
 # --- SYSTEM CHECKS & SELF-MANAGEMENT ---
