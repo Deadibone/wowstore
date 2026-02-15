@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.11"
+VERSION="1.12"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -49,21 +49,26 @@ check_dependencies() {
 
 self_update() {
     # 1. Check Internet Connection (timeout 2s)
-    wget -q --spider --timeout=2 http://github.com
-    if [ $? -eq 0 ]; then
+    if wget -q --spider --timeout=2 http://github.com; then
         # 2. Download remote script to temp
         local temp_script=$(mktemp)
-        wget -q -O "$temp_script" "$UPDATE_URL"
+        
+        # Add timestamp (?t=...) to bypass GitHub CDN caching
+        wget -q -O "$temp_script" "${UPDATE_URL}?t=$(date +%s)"
 
         # 3. Check if download succeeded and has content
         if [ -s "$temp_script" ]; then
-            # 4. Extract remote version
-            local remote_ver=$(grep -m1 '^VERSION=' "$temp_script" | cut -d'"' -f2)
+            # 4. Extract remote version (sanitize to remove \r just in case)
+            local remote_ver=$(grep -m1 '^VERSION=' "$temp_script" | cut -d'"' -f2 | tr -d '\r')
+            
+            if [ "$FORCE_UPDATE" = true ]; then
+                 echo -e "${C}Checking for updates... (Local: $VERSION, Remote: $remote_ver)${RESET}"
+            fi
             
             # Use dpkg to compare versions (Ubuntu specific, safe here)
             # Update if remote > local OR if forced via -u flag
             if [[ -n "$remote_ver" ]] && ( [ "$FORCE_UPDATE" = true ] || dpkg --compare-versions "$remote_ver" gt "$VERSION" ); then
-                echo -e "${M}Update triggered (Remote: $remote_ver, Local: $VERSION). Updating self...${RESET}"
+                echo -e "${M}Update triggered (Remote: $remote_ver). Updating self...${RESET}"
                 
                 # Check if we have write permissions to current script
                 if [ -w "$0" ]; then
@@ -83,6 +88,10 @@ self_update() {
                 else
                     exec "$0" "$@"
                 fi
+            elif [ "$FORCE_UPDATE" = true ]; then
+                echo -e "${G}You are already on the latest version ($VERSION).${RESET}"
+                rm "$temp_script"
+                exit 0
             fi
             rm "$temp_script"
         fi
