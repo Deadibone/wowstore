@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.12"
+VERSION="1.13"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -320,8 +320,8 @@ draw_list() {
 
 draw_footer() {
     echo -e "${M}------------------------------------------------------------${RESET}"
-    echo -e "${Y}[N]${RESET} Next  ${Y}[P]${RESET} Prev  ${Y}[S]${RESET} Search  ${Y}[Q]${RESET} Quit"
-    echo -e "${G}Install:${RESET} Enter ID(s) separated by commas (e.g. 10, 1, 25)"
+    echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[Q]${RESET} Quit"
+    echo -e "${G}Install:${RESET} Type ID(s) (e.g. 10, 1, 25) then Enter"
     echo -n -e "${BOLD}Action > ${RESET}"
 }
 
@@ -476,47 +476,75 @@ while true; do
     draw_header
     draw_list
     draw_footer
-    read -r input
+    
+    # Read one character silently
+    read -rsn1 key
+    
+    # 1. Number Input Handling (Enter ID)
+    if [[ "$key" =~ [0-9] ]]; then
+        input_buffer="$key"
+        echo -n "$key"
+        
+        # Read the rest of the line char by char to handle backspace
+        while true; do
+            read -rsn1 char
+            
+            # Check for Enter (empty string)
+            if [[ -z "$char" ]]; then
+                break
+            fi
+            
+            # Check for Backspace (DEL \x7f or Backspace \x08)
+            if [[ "$char" == $'\x7f' || "$char" == $'\x08' ]]; then
+                if [[ ${#input_buffer} -gt 0 ]]; then
+                    input_buffer="${input_buffer%?}"
+                    echo -ne "\b \b"
+                fi
+            # Allow digits, comma, space
+            elif [[ "$char" =~ [0-9,\ ] ]]; then
+                input_buffer+="$char"
+                echo -n "$char"
+            fi
+        done
+        echo "" # Newline after Enter
+        
+        # Process the full buffer if it matches valid pattern
+        if [[ "$input_buffer" =~ ^[0-9, ]+$ ]]; then
+            IFS=',' read -ra ADDR <<< "$input_buffer"
+            process_queue "${ADDR[@]}"
+            echo -e "\n${G}Press Enter to continue.${RESET}"
+            read -r
+        fi
+        continue
+    fi
 
-    case $input in
-        [nN]*)
+    # 2. Handle Arrow Keys (Escape Sequences)
+    if [[ "$key" == $'\e' ]]; then
+        # Read next 2 bytes with tiny timeout to confirm arrow key
+        read -rsn2 -t 0.01 next
+        if [[ "$next" == "[C" ]]; then 
+            # Right Arrow -> Next Page
             local total_items=${#FILTERED_INDICES[@]}
             local max_page=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
             if [[ $CURRENT_PAGE -lt $max_page ]]; then
                 ((CURRENT_PAGE++))
             fi
-            ;;
-        [pP]*)
+        elif [[ "$next" == "[D" ]]; then 
+            # Left Arrow -> Prev Page
             if [[ $CURRENT_PAGE -gt 1 ]]; then
                 ((CURRENT_PAGE--))
             fi
-            ;;
-        [sS]*)
-            echo -e "\n${C}Enter search term (leave empty to reset):${RESET}"
-            read -r term
-            SEARCH_TERM="$term"
-            CURRENT_PAGE=1
-            init_filter
-            ;;
-        [qQ]*)
-            echo -e "${C}Goodbye!${RESET}"
-            exit 0
-            ;;
-        *)
-            # Handle list of numbers
-            # Define regex in variable to prevent syntax errors with spaces
-            regex='^[0-9, ]+$'
-            if [[ "$input" =~ $regex ]]; then
-                IFS=',' read -ra ADDR <<< "$input"
-                process_queue "${ADDR[@]}"
-                echo -e "\n${G}Press Enter to continue.${RESET}"
-                read -r
-            else
-                if [[ -n "$input" ]]; then
-                    echo -e "\n${R}Invalid input.${RESET} Press Enter."
-                    read -r
-                fi
-            fi
-            ;;
-    esac
+        fi
+    
+    # 3. Handle Single Key Commands
+    elif [[ "$key" == "s" || "$key" == "S" ]]; then
+        echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
+        read -r term
+        SEARCH_TERM="$term"
+        CURRENT_PAGE=1
+        init_filter
+    elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+        echo -e "\n${C}Goodbye!${RESET}"
+        exit 0
+    fi
 done
