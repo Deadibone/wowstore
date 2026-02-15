@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.18"
+VERSION="2.0"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -21,6 +21,12 @@ BOLD='\033[1m'
 BG_BLUE='\033[44m'
 BG_MAG='\033[45m'
 RESET='\033[0m'
+
+# --- DATA STORAGE (V2) ---
+DATA_DIR="$HOME/.local/share/wowstore"
+INSTALLED_DB="$DATA_DIR/installed.db"
+mkdir -p "$DATA_DIR"
+touch "$INSTALLED_DB"
 
 # --- ARGUMENT PARSING ---
 FORCE_UPDATE=false
@@ -48,46 +54,21 @@ check_dependencies() {
 }
 
 self_update() {
-    # 1. Check Internet Connection (timeout 2s)
     if wget -q --spider --timeout=2 http://github.com; then
-        # 2. Download remote script to temp
         local temp_script=$(mktemp)
-        
-        # Add timestamp (?t=...) to bypass GitHub CDN caching
         wget -q -O "$temp_script" "${UPDATE_URL}?t=$(date +%s)"
-
-        # 3. Check if download succeeded and has content
         if [ -s "$temp_script" ]; then
-            # 4. Extract remote version (sanitize to remove \r just in case)
             local remote_ver=$(grep -m1 '^VERSION=' "$temp_script" | cut -d'"' -f2 | tr -d '\r')
-            
             if [ "$FORCE_UPDATE" = true ]; then
                  echo -e "${C}Checking for updates... (Local: $VERSION, Remote: $remote_ver)${RESET}"
             fi
-            
-            # Use dpkg to compare versions (Ubuntu specific, safe here)
-            # Update if remote > local OR if forced via -u flag
             if [[ -n "$remote_ver" ]] && ( [ "$FORCE_UPDATE" = true ] || dpkg --compare-versions "$remote_ver" gt "$VERSION" ); then
                 echo -e "${M}Update triggered (Remote: $remote_ver). Updating self...${RESET}"
-                
-                # Check if we have write permissions to current script
-                if [ -w "$0" ]; then
-                    cp "$temp_script" "$0"
-                else
-                    echo "Sudo required to update installed script..."
-                    sudo cp "$temp_script" "$0"
-                fi
-                
+                if [ -w "$0" ]; then cp "$temp_script" "$0"; else sudo cp "$temp_script" "$0"; fi
                 chmod +x "$0"
                 rm "$temp_script"
                 echo -e "${G}Update complete! Restarting...${RESET}"
-                
-                # Restart without args if forced to prevent loop, otherwise pass args
-                if [ "$FORCE_UPDATE" = true ]; then
-                    exec "$0"
-                else
-                    exec "$0" "$@"
-                fi
+                if [ "$FORCE_UPDATE" = true ]; then exec "$0"; else exec "$0" "$@"; fi
             elif [ "$FORCE_UPDATE" = true ]; then
                 echo -e "${G}You are already on the latest version ($VERSION).${RESET}"
                 rm "$temp_script"
@@ -99,20 +80,14 @@ self_update() {
 }
 
 install_to_path() {
-    # Check if we are already running as the installed command
-    if [[ "$(basename "$0")" == "wowstore" && -f "/usr/local/bin/wowstore" ]]; then
-        return
-    fi
-
-    # Check if 'wowstore' is already in path
+    if [[ "$(basename "$0")" == "wowstore" && -f "/usr/local/bin/wowstore" ]]; then return; fi
     if ! command -v wowstore >/dev/null 2>&1; then
         echo -e "${C}------------------------------------------------------------${RESET}"
         echo -e "${Y}Would you like to install this as the command 'wowstore'?${RESET}"
         echo -e "This allows you to run it from anywhere in the terminal."
         echo -n -e "${BOLD}(y/n) > ${RESET}"
         read -r -n 1 response
-        echo # Newline
-        
+        echo 
         if [[ "$response" =~ ^[yY]$ ]]; then
             echo -e "${M}Installing to /usr/local/bin/wowstore...${RESET}"
             sudo cp "$(realpath "$0")" /usr/local/bin/wowstore
@@ -132,14 +107,11 @@ APPS_PER_PAGE=10
 
 declare -a APP_DB
 APP_DB=(
-    # --- BROWSERS ---
     "Chromium|Open Source Web Browser|apt|chromium-browser|"
     "Brave Browser|Secure, fast & private web browser|apt-key|brave-browser|sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg && echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list"
     "Firefox|Standard Web Browser|apt|firefox|"
     "LibreWolf|Privacy-focused Firefox fork|flatpak|io.gitlab.librewolf-community|"
     "Tor Browser|Anonymity Online|flatpak|com.github.micahflee.torbrowser-launcher|"
-
-    # --- GAMING ---
     "Minecraft|Official Launcher|direct-deb|minecraft-launcher|https://launcher.mojang.com/download/Minecraft.deb"
     "Minetest|Open Source Voxel Game|apt-ppa|minetest|ppa:minetestdevs/stable"
     "Sober (Roblox)|Roblox Client (Vinegar)|flatpak|org.vinegarhq.Sober|"
@@ -149,8 +121,6 @@ APP_DB=(
     "RetroArch|All-in-one Emulator|flatpak|org.libretro.RetroArch|"
     "PPSSPP|PSP Emulator|flatpak|org.ppsspp.PPSSPP|"
     "Dolphin Emulator|GameCube / Wii Emulator|flatpak|org.DolphinEmu.dolphin-emu|"
-    
-    # --- DEV TOOLS ---
     "VS Code|Code editing. Redefined.|apt-key|code|wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg && sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg && sudo sh -c 'echo \"deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main\" > /etc/apt/sources.list.d/vscode.list' && rm -f packages.microsoft.gpg"
     "Sublime Text|Sophisticated text editor|snap|sublime-text|--classic"
     "PyCharm Community|Python IDE|snap|pycharm-community|--classic"
@@ -164,8 +134,6 @@ APP_DB=(
     "Node.js (LTS)|JavaScript runtime|snap|node|--channel=lts/stable --classic"
     "Python 3|Interpreted high-level programming language|apt|python3|"
     "DB Browser for SQLite|Database visualizer|apt-ppa|sqlitebrowser|ppa:linuxgndu/sqlitebrowser"
-    
-    # --- GNOME / DESKTOP UTILS ---
     "Extension Manager|Browse/Install GNOME Extensions|flatpak|com.mattjakeman.ExtensionManager|"
     "GNOME Shell Ext.|Standard GNOME Extensions|apt|gnome-shell-extensions|"
     "GNOME Connector|Browser integration for extensions|apt|gnome-browser-connector|"
@@ -182,8 +150,6 @@ APP_DB=(
     "Tangram|Web apps browser|flatpak|re.sonny.Tangram|"
     "Text Editor|Simple text editor|flatpak|org.gnome.TextEditor|"
     "Weather|Show weather conditions|flatpak|org.gnome.Weather|"
-    
-    # --- COMMUNICATION ---
     "Discord|All-in-one voice and text chat|snap|discord|"
     "Telegram|Messaging with a focus on speed|snap|telegram-desktop|"
     "Signal|Encrypted instant messaging|flatpak|org.signal.Signal|"
@@ -192,8 +158,6 @@ APP_DB=(
     "Element|Matrix Client|flatpak|im.riot.Riot|"
     "Teams for Linux|Unofficial Microsoft Teams|flatpak|com.github.IsmaelMartinez.teams_for_linux|"
     "Thunderbird|Email Client|apt|thunderbird|"
-    
-    # --- PRODUCTIVITY & OFFICE ---
     "LibreOffice|Office Suite (Latest)|apt-ppa|libreoffice|ppa:libreoffice/ppa"
     "OnlyOffice|Office Suite|flatpak|org.onlyoffice.desktopeditors|"
     "Obsidian|Knowledge Base|flatpak|md.obsidian.Obsidian|"
@@ -201,8 +165,6 @@ APP_DB=(
     "Joplin|Note taking app|flatpak|net.cozic.joplin_desktop|"
     "LocalSend|AirDrop Alternative (LAN Share)|flatpak|org.localsend.LocalSend_App|"
     "Proton VPN|High-speed secure VPN|deb-repo|proton-vpn-gnome-desktop|https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.8_all.deb"
-
-    # --- MEDIA & CREATIVE ---
     "VLC Media Player|The best open source media player|apt|vlc|"
     "MPV|Minimalist media player|apt|mpv|"
     "Spotify|Music for everyone|snap|spotify|"
@@ -217,8 +179,6 @@ APP_DB=(
     "Darktable|Photography workflow|flatpak|org.darktable.Darktable|"
     "Clementine|Modern music player|apt|clementine|"
     "Stremio|Video streaming|flatpak|com.stremio.Stremio|"
-    
-    # --- SYSTEM & TOOLS ---
     "Htop|Interactive process viewer|apt|htop|"
     "Neofetch|System information tool|apt|neofetch|"
     "GParted|Partition editor|apt|gparted|"
@@ -231,33 +191,88 @@ APP_DB=(
     "Transmission|BitTorrent client|apt|transmission|"
 )
 
-# --- SORTING APP DB ALPHABETICALLY ---
-# Uses case-insensitive sort based on the first field (Name)
+# --- SORTING APP DB ---
 IFS=$'\n' APP_DB=($(sort -f -t'|' -k1 <<<"${APP_DB[*]}"))
 unset IFS
 
-# --- GLOBAL VARIABLES ---
+# --- GLOBAL VARIABLES & STATE ---
 CURRENT_PAGE=1
 SEARCH_TERM=""
 FILTERED_INDICES=()
+VIEW_MODE="BROWSE" # "BROWSE" or "LIBRARY"
+
+# --- LIBRARY FUNCTIONS (V2) ---
+declare -A INSTALLED_MAP
+declare -a INSTALLED_LIST
+
+load_installed() {
+    INSTALLED_LIST=()
+    INSTALLED_MAP=()
+    if [[ -f "$INSTALLED_DB" ]]; then
+        while IFS='|' read -r name type pkg; do
+            if [[ -n "$name" ]]; then
+                # Clean up carriage returns/spaces just in case
+                name=$(echo "$name" | xargs)
+                INSTALLED_LIST+=("$name|$type|$pkg")
+                INSTALLED_MAP["$name"]=1
+            fi
+        done < "$INSTALLED_DB"
+    fi
+}
+
+track_install() {
+    local name="$1"
+    local type="$2"
+    local pkg="$3"
+    # Remove existing to update info
+    if [[ -f "$INSTALLED_DB" ]]; then
+        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null && mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+    fi
+    echo "$name|$type|$pkg" >> "$INSTALLED_DB"
+    load_installed
+}
+
+track_remove() {
+    local name="$1"
+    if [[ -f "$INSTALLED_DB" ]]; then
+        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null && mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+    fi
+    load_installed
+}
 
 # --- INITIALIZATION ---
+load_installed
 init_filter() {
     FILTERED_INDICES=()
-    local i=0
-    for app in "${APP_DB[@]}"; do
-        if [[ -z "$SEARCH_TERM" ]]; then
-            FILTERED_INDICES+=($i)
-        else
-            # Case insensitive search
-            local name=$(echo "$app" | cut -d'|' -f1)
-            local desc=$(echo "$app" | cut -d'|' -f2)
-            if echo "$name $desc" | grep -iq "$SEARCH_TERM"; then
+    if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+        local i=0
+        for app in "${APP_DB[@]}"; do
+            if [[ -z "$SEARCH_TERM" ]]; then
                 FILTERED_INDICES+=($i)
+            else
+                local name=$(echo "$app" | cut -d'|' -f1)
+                local desc=$(echo "$app" | cut -d'|' -f2)
+                if echo "$name $desc" | grep -iq "$SEARCH_TERM"; then
+                    FILTERED_INDICES+=($i)
+                fi
             fi
-        fi
-        ((i++))
-    done
+            ((i++))
+        done
+    else
+        # Library Mode
+        local i=0
+        for app in "${INSTALLED_LIST[@]}"; do
+            if [[ -z "$SEARCH_TERM" ]]; then
+                FILTERED_INDICES+=($i)
+            else
+                local name=$(echo "$app" | cut -d'|' -f1)
+                if echo "$name" | grep -iq "$SEARCH_TERM"; then
+                    FILTERED_INDICES+=($i)
+                fi
+            fi
+            ((i++))
+        done
+    fi
 }
 
 # --- GUI FUNCTIONS ---
@@ -265,14 +280,19 @@ init_filter() {
 draw_header() {
     clear
     echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}v${VERSION}${RESET}"
+    if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+        echo -e "${M}------------------------------------------------------------${RESET}"
+        echo -e " ${C}MODE:${RESET} ${W}${BOLD}BROWSE${RESET}  ${Y}[L] Go to Library${RESET}"
+    else
+        echo -e "${M}------------------------------------------------------------${RESET}"
+        echo -e " ${C}MODE:${RESET} ${G}${BOLD}LIBRARY (Installed)${RESET}  ${Y}[L] Go to Browse${RESET}"
+    fi
+    
     echo -e "${M}------------------------------------------------------------${RESET}"
     if [[ -n "$SEARCH_TERM" ]]; then
-        echo -e "${Y}Search results for: '${W}$SEARCH_TERM${Y}'${RESET}"
-    else
-        echo -e "${C}Browse Catalogue (Sorted A-Z)${RESET}"
+        echo -e "${Y}Search: '${W}$SEARCH_TERM${Y}'${RESET}"
     fi
-    echo -e "${M}------------------------------------------------------------${RESET}"
-    printf "${BOLD}%-4s %-20s %-10s %-30s${RESET}\n" "ID" "Name" "Type" "Description"
+    printf "${BOLD}%-4s %-22s %-10s %-30s${RESET}\n" "ID" "Name" "Type" "Status/Desc"
     echo -e "${B}------------------------------------------------------------${RESET}"
 }
 
@@ -281,7 +301,7 @@ draw_list() {
     local start_index=$(( (CURRENT_PAGE - 1) * APPS_PER_PAGE ))
     local end_index=$(( start_index + APPS_PER_PAGE - 1 ))
     
-    if [[ $start_index -ge $total_items ]]; then
+    if [[ $start_index -ge $total_items && $total_items -gt 0 ]]; then
         CURRENT_PAGE=1
         start_index=0
         end_index=$(( APPS_PER_PAGE - 1 ))
@@ -290,13 +310,35 @@ draw_list() {
     local count=0
     for i in "${FILTERED_INDICES[@]}"; do
         if [[ $count -ge $start_index && $count -le $end_index ]]; then
-            local entry="${APP_DB[$i]}"
-            local name=$(echo "$entry" | cut -d'|' -f1)
-            local desc=$(echo "$entry" | cut -d'|' -f2)
-            local type=$(echo "$entry" | cut -d'|' -f3)
+            local entry=""
+            local name=""
+            local type=""
+            local desc=""
+            local status=""
             
-            # Truncate description for display
-            if [[ ${#desc} -gt 30 ]]; then desc="${desc:0:27}..."; fi
+            if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+                entry="${APP_DB[$i]}"
+                name=$(echo "$entry" | cut -d'|' -f1)
+                desc=$(echo "$entry" | cut -d'|' -f2)
+                type=$(echo "$entry" | cut -d'|' -f3)
+                
+                if [[ ${#desc} -gt 25 ]]; then desc="${desc:0:22}..."; fi
+                
+                # Check installed status
+                if [[ -n "${INSTALLED_MAP["$name"]}" ]]; then
+                    status="${G}[✔] Installed${RESET}"
+                    name="${G}$name${RESET}"
+                else
+                    status="$desc"
+                fi
+            else
+                # Library Mode
+                entry="${INSTALLED_LIST[$i]}"
+                name=$(echo "$entry" | cut -d'|' -f1)
+                type=$(echo "$entry" | cut -d'|' -f2)
+                desc="Manage this app"
+                status="${G}Ready${RESET}"
+            fi
             
             # Color code types
             local type_color=$W
@@ -307,7 +349,7 @@ draw_list() {
                 *) type_color=$Y ;;
             esac
 
-            printf "${C}%-4s${RESET} ${BOLD}%-20s${RESET} ${type_color}%-10s${RESET} %-30s\n" "$((i+1))" "$name" "$type" "$desc"
+            printf "${C}%-4s${RESET} ${BOLD}%-22s${RESET} ${type_color}%-10s${RESET} %-30s\n" "$((i+1))" "$name" "$type" "$status"
         fi
         ((count++))
     done
@@ -315,81 +357,58 @@ draw_list() {
     echo -e "${B}------------------------------------------------------------${RESET}"
     local total_pages=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
     [ $total_pages -eq 0 ] && total_pages=1
-    echo -e "Page: ${W}$CURRENT_PAGE / $total_pages${RESET} | Total Apps: ${W}$total_items${RESET}"
+    echo -e "Page: ${W}$CURRENT_PAGE / $total_pages${RESET} | Total: ${W}$total_items${RESET}"
 }
 
 draw_footer() {
     echo -e "${M}------------------------------------------------------------${RESET}"
-    echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[Q]${RESET} Quit"
-    echo -e "${G}Install:${RESET} Type ID(s) (e.g. 10, 1, 25) then Enter"
-    # Show current buffer
+    echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[L]${RESET} Mode  ${Y}[Q]${RESET} Quit"
+    if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+        echo -e "${G}Install:${RESET} Type ID(s) then Enter"
+    else
+        echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
+    fi
     echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}"
 }
 
-# --- INSTALLATION UI & LOGIC ---
-
+# --- UI HELPERS ---
 draw_install_screen() {
-    local percent=$1
-    local msg=$2
+    local percent=$1; local msg=$2
     local bar_width=40
     local completed=$(( bar_width * percent / 100 ))
     local remaining=$(( bar_width - completed ))
-    
     clear
-    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}Installing...${RESET}"
-    echo -e "${M}------------------------------------------------------------${RESET}"
-    echo -e "\n\n"
-    
-    # Draw Progress Bar
+    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}Processing...${RESET}"
+    echo -e "${M}------------------------------------------------------------${RESET}\n\n"
     echo -ne "    ${BOLD}[${G}"
     for ((i=0; i<completed; i++)); do echo -n "#"; done
     echo -ne "${RESET}"
     for ((i=0; i<remaining; i++)); do echo -n "."; done
     echo -ne "${BOLD}] ${percent}%${RESET}\n\n"
-    
-    # Draw Status Message
-    echo -e "    ${C}Status:${RESET} ${W}${msg}${RESET}"
-    echo -e "\n\n"
+    echo -e "    ${C}Status:${RESET} ${W}${msg}${RESET}\n\n"
     echo -e "${M}------------------------------------------------------------${RESET}"
-    echo -e "${Y}Please wait. This may take a while depending on download speed.${RESET}"
 }
 
 run_silent() {
-    local cmd="$1"
-    local logfile="/tmp/wowstore_install.log"
+    local cmd="$1"; local logfile="/tmp/wowstore_install.log"
     eval "$cmd" >> "$logfile" 2>&1
     return $?
 }
 
-process_queue() {
-    # Takes an array of IDs as input
+# --- INSTALLATION LOGIC ---
+process_install_queue() {
     local ids_to_process=("$@")
     local LOGFILE="/tmp/wowstore_install.log"
-    
-    # Lists to hold package names
-    local BATCH_APT=()
-    local BATCH_SNAP=()
-    local BATCH_FLATPAK=()
-    local DIRECT_DEBS=() 
-    
+    local BATCH_APT=(); local BATCH_SNAP=(); local BATCH_FLATPAK=(); local DIRECT_DEBS=() 
     local update_apt_needed=false
 
-    # --- 1. PRE-CHECK: Sudo & Clear Log ---
     echo "" > "$LOGFILE"
     echo -e "\n${C}Authenticating...${RESET}"
-    if ! sudo -v; then
-        echo -e "${R}Authentication failed. Installation aborted.${RESET}"
-        read -r -p "Press Enter to continue..."
-        return
-    fi
+    if ! sudo -v; then echo -e "${R}Auth failed.${RESET}"; read -r; return; fi
 
-    # --- 2. BUILD QUEUES ---
     for id in "${ids_to_process[@]}"; do
-        # Trim whitespace
         id=$(echo "$id" | xargs)
         local index=$((id - 1))
-        
-        # Validation
         if [[ $index -lt 0 || $index -ge ${#APP_DB[@]} ]]; then continue; fi
 
         local entry="${APP_DB[$index]}"
@@ -399,144 +418,155 @@ process_queue() {
         local extra=$(echo "$entry" | cut -d'|' -f5)
 
         case $type in
-            "snap") BATCH_SNAP+=("$pkg $extra|$name") ;;
-            "flatpak") BATCH_FLATPAK+=("$pkg|$name") ;;
-            "apt") BATCH_APT+=("$pkg") ;;
+            "snap") BATCH_SNAP+=("$pkg $extra|$name|$type|$pkg") ;;
+            "flatpak") BATCH_FLATPAK+=("$pkg|$name|$type|$pkg") ;;
+            "apt") BATCH_APT+=("$pkg|$name|$type|$pkg") ;;
             "apt-universe") 
-                sudo add-apt-repository universe -y >> "$LOGFILE" 2>&1
-                update_apt_needed=true
-                BATCH_APT+=("$pkg") 
-                ;;
+                sudo add-apt-repository universe -y >> "$LOGFILE" 2>&1; update_apt_needed=true
+                BATCH_APT+=("$pkg|$name|$type|$pkg") ;;
             "apt-ppa")
-                sudo add-apt-repository -y "$extra" >> "$LOGFILE" 2>&1
-                update_apt_needed=true
-                BATCH_APT+=("$pkg")
-                ;;
+                sudo add-apt-repository -y "$extra" >> "$LOGFILE" 2>&1; update_apt_needed=true
+                BATCH_APT+=("$pkg|$name|$type|$pkg") ;;
             "apt-key")
-                eval "$extra" >> "$LOGFILE" 2>&1
-                update_apt_needed=true
-                BATCH_APT+=("$pkg")
-                ;;
+                eval "$extra" >> "$LOGFILE" 2>&1; update_apt_needed=true
+                BATCH_APT+=("$pkg|$name|$type|$pkg") ;;
             "deb-repo")
-                local tmp_deb="/tmp/wow_store_repo_setup_$id.deb"
-                wget -q -O "$tmp_deb" "$extra"
-                sudo dpkg -i "$tmp_deb" >> "$LOGFILE" 2>&1
-                rm -f "$tmp_deb"
-                update_apt_needed=true
-                BATCH_APT+=("$pkg")
-                ;;
-            "direct-deb")
-                DIRECT_DEBS+=("$name|$extra")
-                ;;
+                local tmp_deb="/tmp/wow_repo.deb"; wget -q -O "$tmp_deb" "$extra"
+                sudo dpkg -i "$tmp_deb" >> "$LOGFILE" 2>&1; rm -f "$tmp_deb"; update_apt_needed=true
+                BATCH_APT+=("$pkg|$name|$type|$pkg") ;;
+            "direct-deb") DIRECT_DEBS+=("$name|$extra|$type|$pkg") ;;
         esac
     done
 
-    # --- 3. CALCULATE STEPS ---
-    local total_steps=0
-    local current_step=0
-    
+    # Calc steps
+    local total_steps=0; local current_step=0
     [ "$update_apt_needed" = true ] && ((total_steps++))
     [ ${#BATCH_APT[@]} -gt 0 ] && ((total_steps++))
-    ((total_steps += ${#DIRECT_DEBS[@]}))
-    ((total_steps += ${#BATCH_SNAP[@]}))
-    ((total_steps += ${#BATCH_FLATPAK[@]}))
-    
+    ((total_steps += ${#DIRECT_DEBS[@]})); ((total_steps += ${#BATCH_SNAP[@]})); ((total_steps += ${#BATCH_FLATPAK[@]}))
     if [ $total_steps -eq 0 ]; then return; fi
 
-    # --- 4. EXECUTE WITH PROGRESS UI ---
-    
-    # APT Update
     if [ "$update_apt_needed" = true ]; then
-        ((current_step++))
-        local pct=$(( current_step * 100 / total_steps ))
-        draw_install_screen $pct "Updating System Repositories..."
-        if ! run_silent "sudo apt update"; then
-            clear
-            echo -e "${R}Error Updating APT. Log output:${RESET}\n"
-            cat "$LOGFILE"
-            read -r -p "Press Enter to return..."
-            return
-        fi
+        ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Updating Repositories..."
+        run_silent "sudo apt update"
     fi
 
-    # APT Batch Install
     if [ ${#BATCH_APT[@]} -gt 0 ]; then
-        ((current_step++))
-        local pct=$(( current_step * 100 / total_steps ))
-        draw_install_screen $pct "Installing System Packages (APT)..."
-        # Combine array for install
-        if ! run_silent "sudo apt install -y ${BATCH_APT[*]}"; then
-            clear
-            echo -e "${R}Error installing APT packages. Log output:${RESET}\n"
-            cat "$LOGFILE"
-            read -r -p "Press Enter to return..."
-            return
+        ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing System Packages..."
+        # Extract just pkg names for apt command
+        local apt_pkgs=""
+        for item in "${BATCH_APT[@]}"; do apt_pkgs+="$(echo "$item" | cut -d'|' -f1) "; done
+        
+        if run_silent "sudo apt install -y $apt_pkgs"; then
+            for item in "${BATCH_APT[@]}"; do track_install "$(echo "$item" | cut -d'|' -f2)" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"; done
+        else
+            clear; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     fi
 
-    # Direct Debs
-    for ddeb in "${DIRECT_DEBS[@]}"; do
-        ((current_step++))
-        local pct=$(( current_step * 100 / total_steps ))
-        local d_name=$(echo "$ddeb" | cut -d'|' -f1)
-        local d_url=$(echo "$ddeb" | cut -d'|' -f2)
-        local d_file="/tmp/$(basename "$d_url")"
-        
-        draw_install_screen $pct "Downloading & Installing $d_name..."
-        
+    for item in "${DIRECT_DEBS[@]}"; do
+        ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing $(echo "$item" | cut -d'|' -f1)..."
+        local d_url=$(echo "$item" | cut -d'|' -f2); local d_file="/tmp/$(basename "$d_url")"
         wget -q -O "$d_file" "$d_url"
-        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
-             clear
-            echo -e "${R}Error installing $d_name. Log output:${RESET}\n"
-            cat "$LOGFILE"
-            rm -f "$d_file"
-            read -r -p "Press Enter to return..."
-            return
+        if run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
+            track_install "$(echo "$item" | cut -d'|' -f1)" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
+        else
+            clear; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return
         fi
         rm -f "$d_file"
     done
 
-    # Snaps
-    for s_item in "${BATCH_SNAP[@]}"; do
-        ((current_step++))
-        local pct=$(( current_step * 100 / total_steps ))
-        local s_cmd=$(echo "$s_item" | cut -d'|' -f1)
-        local s_name=$(echo "$s_item" | cut -d'|' -f2)
-        
-        draw_install_screen $pct "Installing Snap: $s_name..."
-        if ! run_silent "sudo snap install $s_cmd"; then
-            clear
-            echo -e "${R}Error installing $s_name. Log output:${RESET}\n"
-            cat "$LOGFILE"
-            read -r -p "Press Enter to return..."
-            return
+    for item in "${BATCH_SNAP[@]}"; do
+        ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
+        draw_install_screen $((current_step*100/total_steps)) "Installing Snap: $name..."
+        if run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then
+            track_install "$name" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
+        else
+            clear; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     done
 
-    # Flatpaks
-    for f_item in "${BATCH_FLATPAK[@]}"; do
-        ((current_step++))
-        local pct=$(( current_step * 100 / total_steps ))
-        local f_pkg=$(echo "$f_item" | cut -d'|' -f1)
-        local f_name=$(echo "$f_item" | cut -d'|' -f2)
-        
-        draw_install_screen $pct "Installing Flatpak: $f_name..."
-        
-        # Ensure plugin first silently
+    for item in "${BATCH_FLATPAK[@]}"; do
+        ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
+        draw_install_screen $((current_step*100/total_steps)) "Installing Flatpak: $name..."
         run_silent "sudo apt install -y gnome-software-plugin-flatpak"
-        
-        if ! run_silent "flatpak install --user -y flathub $f_pkg"; then
-            clear
-            echo -e "${R}Error installing $f_name. Log output:${RESET}\n"
-            cat "$LOGFILE"
-            read -r -p "Press Enter to return..."
-            return
+        if run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then
+            track_install "$name" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
+        else
+            clear; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     done
 
-    # Finish
-    draw_install_screen 100 "All tasks completed successfully!"
-    sleep 1.5
+    draw_install_screen 100 "Done!"
+    sleep 1
+}
+
+# --- UNINSTALL/UPDATE LOGIC ---
+process_library_queue() {
+    local ids_to_process=("$@")
+    local LOGFILE="/tmp/wowstore_install.log"
+    
+    # Prompt for action
+    echo -e "\n\n${C}Selected ${#ids_to_process[@]} app(s).${RESET}"
+    echo -e "${Y}[1]${RESET} Update / Reinstall"
+    echo -e "${R}[2]${RESET} Uninstall"
+    echo -e "${W}[3]${RESET} Cancel"
+    echo -n -e "${BOLD}Choose > ${RESET}"
+    read -r action
+
+    if [[ "$action" == "3" || -z "$action" ]]; then return; fi
+
+    echo "" > "$LOGFILE"
+    echo -e "\n${C}Authenticating...${RESET}"
+    if ! sudo -v; then echo -e "${R}Auth failed.${RESET}"; read -r; return; fi
+
+    local total_steps=${#ids_to_process[@]}
+    local current_step=0
+
+    for id in "${ids_to_process[@]}"; do
+        ((current_step++))
+        id=$(echo "$id" | xargs)
+        local index=$((id - 1))
+        if [[ $index -lt 0 || $index -ge ${#INSTALLED_LIST[@]} ]]; then continue; fi
+
+        local entry="${INSTALLED_LIST[$index]}"
+        local name=$(echo "$entry" | cut -d'|' -f1)
+        local type=$(echo "$entry" | cut -d'|' -f2)
+        local pkg=$(echo "$entry" | cut -d'|' -f3)
+
+        if [[ "$action" == "2" ]]; then
+            # UNINSTALL
+            draw_install_screen $((current_step*100/total_steps)) "Uninstalling $name..."
+            local success=false
+            
+            case $type in
+                "snap") run_silent "sudo snap remove $pkg" && success=true ;;
+                "flatpak") run_silent "flatpak uninstall --user -y $pkg" && success=true ;;
+                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") 
+                    run_silent "sudo apt remove -y $pkg" && success=true ;;
+            esac
+
+            if [ "$success" = true ]; then
+                track_remove "$name"
+            else
+                clear; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r
+            fi
+        
+        elif [[ "$action" == "1" ]]; then
+            # UPDATE / REINSTALL
+            draw_install_screen $((current_step*100/total_steps)) "Updating/Reinstalling $name..."
+            case $type in
+                "snap") run_silent "sudo snap refresh $pkg || sudo snap install $pkg" ;;
+                "flatpak") run_silent "flatpak update -y $pkg || flatpak install --user -y flathub $pkg" ;;
+                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") 
+                    run_silent "sudo apt install --only-upgrade -y $pkg || sudo apt install -y $pkg" ;;
+            esac
+        fi
+    done
+    
+    draw_install_screen 100 "Tasks Completed"
+    sleep 1
+    # Reload list to reflect changes
+    init_filter
 }
 
 # --- MAIN LOOP ---
@@ -555,30 +585,32 @@ while true; do
     draw_footer
     
     # Read one character silently
-    # IFS= prevents trimming whitespace (fixes Space issue)
     IFS= read -rsn1 key
     
     # Handle Enter (Empty key)
     if [[ -z "$key" ]]; then
         if [[ -n "$INPUT_BUFFER" ]]; then
-            # Validate buffer regex
             regex='^[0-9, ]+$'
             if [[ "$INPUT_BUFFER" =~ $regex ]]; then
                 IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
-                process_queue "${ADDR[@]}"
-                INPUT_BUFFER="" # Clear after success
+                if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+                    process_install_queue "${ADDR[@]}"
+                else
+                    process_library_queue "${ADDR[@]}"
+                fi
+                INPUT_BUFFER=""
+                # Reset search if needed to show updated status
+                init_filter
             else
-                INPUT_BUFFER="" # Clear invalid
+                INPUT_BUFFER=""
             fi
         fi
         continue
     fi
 
-    # Handle Backspace (127 or 8)
+    # Handle Backspace
     if [[ "$key" == $'\x7f' || "$key" == $'\x08' ]]; then
-        if [[ -n "$INPUT_BUFFER" ]]; then
-            INPUT_BUFFER="${INPUT_BUFFER%?}"
-        fi
+        if [[ -n "$INPUT_BUFFER" ]]; then INPUT_BUFFER="${INPUT_BUFFER%?}"; fi
         continue
     fi
 
@@ -586,32 +618,26 @@ while true; do
     if [[ "$key" == $'\e' ]]; then
         read -rsn2 -t 0.01 next
         if [[ "$next" == "[C" ]]; then 
-            # Right Arrow -> Next Page
             total_items=${#FILTERED_INDICES[@]}
             max_page=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
-            if [[ $CURRENT_PAGE -lt $max_page ]]; then
-                ((CURRENT_PAGE++))
-            fi
+            if [[ $CURRENT_PAGE -lt $max_page ]]; then ((CURRENT_PAGE++)); fi
         elif [[ "$next" == "[D" ]]; then 
-            # Left Arrow -> Prev Page
-            if [[ $CURRENT_PAGE -gt 1 ]]; then
-                ((CURRENT_PAGE--))
-            fi
+            if [[ $CURRENT_PAGE -gt 1 ]]; then ((CURRENT_PAGE--)); fi
         fi
         continue
     fi
 
-    # Handle Single Key Commands
-    if [[ "$key" == "s" || "$key" == "S" ]]; then
-        echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
-        read -r term
-        SEARCH_TERM="$term"
-        CURRENT_PAGE=1
-        init_filter
-        continue
-    elif [[ "$key" == "q" || "$key" == "Q" ]]; then
-        echo -e "\n${C}Goodbye!${RESET}"
-        exit 0
+    # Handle Single Key Commands (Only if buffer is empty, to allow typing numbers)
+    if [[ -z "$INPUT_BUFFER" ]]; then
+        if [[ "$key" == "s" || "$key" == "S" ]]; then
+            echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
+            read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
+        elif [[ "$key" == "l" || "$key" == "L" ]]; then
+            if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
+            CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
+        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+            echo -e "\n${C}Goodbye!${RESET}"; exit 0
+        fi
     fi
 
     # Handle Digits, Comma, Space (Input Buffer)
