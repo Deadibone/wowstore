@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.2"
+VERSION="2.3"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -196,7 +196,7 @@ SEARCH_TERM=""
 FILTERED_INDICES=()
 VIEW_MODE="BROWSE" # "BROWSE" or "LIBRARY"
 
-# --- LIBRARY FUNCTIONS (V2.2 - System Detection) ---
+# --- LIBRARY FUNCTIONS (V2.3 - System Detection) ---
 declare -A INSTALLED_MAP
 declare -a INSTALLED_LIST
 
@@ -205,9 +205,10 @@ load_installed() {
     INSTALLED_MAP=()
     
     # Declare associative arrays for fast lookup of system packages
-    declare -A SYS_DEBS
-    declare -A SYS_SNAPS
-    declare -A SYS_FLATPAKS
+    # Explicitly clear them to avoid persistence across reloads
+    unset SYS_DEBS; declare -A SYS_DEBS
+    unset SYS_SNAPS; declare -A SYS_SNAPS
+    unset SYS_FLATPAKS; declare -A SYS_FLATPAKS
 
     # Load Debs
     if command -v dpkg-query >/dev/null; then
@@ -324,7 +325,8 @@ draw_list() {
             local name=""
             local type=""
             local desc=""
-            local status=""
+            local status_display=""
+            local name_display=""
             
             if [[ "$VIEW_MODE" == "BROWSE" ]]; then
                 entry="${APP_DB[$i]}"
@@ -336,10 +338,11 @@ draw_list() {
                 
                 # Check installed status
                 if [[ -n "${INSTALLED_MAP["$name"]}" ]]; then
-                    status="${G}[✔] Installed${RESET}"
-                    name="${G}$name${RESET}"
+                    status_display="${G}[✔] Installed${RESET}"
+                    name_display="${G}$name${RESET}"
                 else
-                    status="$desc"
+                    status_display="$desc"
+                    name_display="${BOLD}$name${RESET}"
                 fi
             else
                 # Library Mode
@@ -347,7 +350,8 @@ draw_list() {
                 name=$(echo "$entry" | cut -d'|' -f1)
                 type=$(echo "$entry" | cut -d'|' -f2)
                 desc="Manage this app"
-                status="${G}Ready${RESET}"
+                status_display="${G}Ready${RESET}"
+                name_display="${BOLD}$name${RESET}"
             fi
             
             # Color code types
@@ -359,7 +363,13 @@ draw_list() {
                 *) type_color=$Y ;;
             esac
 
-            printf "${C}%-4s${RESET} ${BOLD}%-22s${RESET} ${type_color}%-10s${RESET} %-30s\n" "$((i+1))" "$name" "$type" "$status"
+            # Separate color from name for printf width calc to work
+            local row_name_color=$BOLD
+            if [[ -n "${INSTALLED_MAP["$name"]}" && "$VIEW_MODE" == "BROWSE" ]]; then
+                row_name_color=$G
+            fi
+
+            printf "${C}%-4s${RESET} ${row_name_color}%-22s${RESET} ${type_color}%-10s${RESET} %-30s\n" "$((i+1))" "$name" "$type" "$status_display"
         fi
         ((count++))
     done
@@ -545,7 +555,14 @@ process_library_queue() {
             
             case $type in
                 "snap") run_silent "sudo snap remove $pkg" && success=true ;;
-                "flatpak") run_silent "flatpak uninstall --user -y $pkg" && success=true ;;
+                "flatpak") 
+                    # Try user uninstall first, then generic uninstall
+                    if run_silent "flatpak uninstall --user -y $pkg"; then
+                        success=true
+                    elif run_silent "flatpak uninstall -y $pkg"; then
+                        success=true
+                    fi
+                    ;;
                 "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") 
                     run_silent "sudo apt remove -y $pkg" && success=true ;;
             esac
