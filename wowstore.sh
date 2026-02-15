@@ -5,22 +5,23 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.0"
+VERSION="2.1"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
 # --- COLORS & STYLING ---
-R='\033[0;31m'
-G='\033[0;32m'
-Y='\033[1;33m'
-B='\033[0;34m'
-M='\033[0;35m'
-C='\033[0;36m'
-W='\033[1;37m'
-BOLD='\033[1m'
-BG_BLUE='\033[44m'
-BG_MAG='\033[45m'
-RESET='\033[0m'
+# Use $'' syntax to ensure escape codes are interpreted correctly by printf
+R=$'\033[0;31m'
+G=$'\033[0;32m'
+Y=$'\033[1;33m'
+B=$'\033[0;34m'
+M=$'\033[0;35m'
+C=$'\033[0;36m'
+W=$'\033[1;37m'
+BOLD=$'\033[1m'
+BG_BLUE=$'\033[44m'
+BG_MAG=$'\033[45m'
+RESET=$'\033[0m'
 
 # --- DATA STORAGE (V2) ---
 DATA_DIR="$HOME/.local/share/wowstore"
@@ -226,7 +227,8 @@ track_install() {
     local pkg="$3"
     # Remove existing to update info
     if [[ -f "$INSTALLED_DB" ]]; then
-        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null && mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null 
+        mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
     fi
     echo "$name|$type|$pkg" >> "$INSTALLED_DB"
     load_installed
@@ -235,7 +237,10 @@ track_install() {
 track_remove() {
     local name="$1"
     if [[ -f "$INSTALLED_DB" ]]; then
-        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null && mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+        # Use grep -v to filter out the line. 
+        # Do NOT link with && mv, because if grep -v produces empty output (empty db), exit code is 1
+        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null
+        mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
     fi
     load_installed
 }
