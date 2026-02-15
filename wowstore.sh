@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.16"
+VERSION="1.17"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -44,7 +44,7 @@ check_dependencies() {
     command -v curl >/dev/null 2>&1 || { echo "Installing curl..."; sudo apt update && sudo apt install -y curl; }
     command -v wget >/dev/null 2>&1 || { echo "Installing wget..."; sudo apt update && sudo apt install -y wget; }
     command -v snap >/dev/null 2>&1 || { echo "Snap not found. Some apps may not install."; }
-    command -v flatpak >/dev/null 2>&1 || { echo "Flatpak not found. Installing..."; sudo apt install -y flatpak; flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo; }
+    command -v flatpak >/dev/null 2>&1 || { echo "Flatpak not found. Installing..."; sudo apt install -y flatpak; flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo; }
 }
 
 self_update() {
@@ -459,7 +459,8 @@ process_queue() {
         echo -e "\n${C}Installing Flatpak packages: ${W}${BATCH_FLATPAK[*]}${RESET}"
         # Ensure plugin exists once
         sudo apt install -y gnome-software-plugin-flatpak >/dev/null 2>&1
-        flatpak install -y flathub "${BATCH_FLATPAK[@]}"
+        # Use --user to avoid prompts about system vs user installation
+        flatpak install --user -y flathub "${BATCH_FLATPAK[@]}"
     fi
 
     echo -e "\n${G}Batch processing complete!${RESET}"
