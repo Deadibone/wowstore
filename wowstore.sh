@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.9"
+VERSION="1.10"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -21,6 +21,12 @@ BOLD='\033[1m'
 BG_BLUE='\033[44m'
 BG_MAG='\033[45m'
 RESET='\033[0m'
+
+# --- ARGUMENT PARSING ---
+FORCE_UPDATE=false
+if [[ "$1" == "-u" ]]; then
+    FORCE_UPDATE=true
+fi
 
 # --- SYSTEM CHECKS & SELF-MANAGEMENT ---
 
@@ -44,8 +50,10 @@ self_update() {
             # 4. Extract remote version
             local remote_ver=$(grep -m1 '^VERSION=' "$temp_script" | cut -d'"' -f2)
             
-            if [[ -n "$remote_ver" && "$remote_ver" != "$VERSION" ]]; then
-                echo -e "${M}New version found ($remote_ver). Updating self...${RESET}"
+            # Use dpkg to compare versions (Ubuntu specific, safe here)
+            # Update if remote > local OR if forced via -u flag
+            if [[ -n "$remote_ver" ]] && ( [ "$FORCE_UPDATE" = true ] || dpkg --compare-versions "$remote_ver" gt "$VERSION" ); then
+                echo -e "${M}Update triggered (Remote: $remote_ver, Local: $VERSION). Updating self...${RESET}"
                 
                 # Check if we have write permissions to current script
                 if [ -w "$0" ]; then
@@ -58,7 +66,13 @@ self_update() {
                 chmod +x "$0"
                 rm "$temp_script"
                 echo -e "${G}Update complete! Restarting...${RESET}"
-                exec "$0" "$@"
+                
+                # Restart without args if forced to prevent loop, otherwise pass args
+                if [ "$FORCE_UPDATE" = true ]; then
+                    exec "$0"
+                else
+                    exec "$0" "$@"
+                fi
             fi
             rm "$temp_script"
         fi
