@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.17"
+VERSION="1.18"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -326,144 +326,217 @@ draw_footer() {
     echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}"
 }
 
+# --- INSTALLATION UI & LOGIC ---
+
+draw_install_screen() {
+    local percent=$1
+    local msg=$2
+    local bar_width=40
+    local completed=$(( bar_width * percent / 100 ))
+    local remaining=$(( bar_width - completed ))
+    
+    clear
+    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}Installing...${RESET}"
+    echo -e "${M}------------------------------------------------------------${RESET}"
+    echo -e "\n\n"
+    
+    # Draw Progress Bar
+    echo -ne "    ${BOLD}[${G}"
+    for ((i=0; i<completed; i++)); do echo -n "#"; done
+    echo -ne "${RESET}"
+    for ((i=0; i<remaining; i++)); do echo -n "."; done
+    echo -ne "${BOLD}] ${percent}%${RESET}\n\n"
+    
+    # Draw Status Message
+    echo -e "    ${C}Status:${RESET} ${W}${msg}${RESET}"
+    echo -e "\n\n"
+    echo -e "${M}------------------------------------------------------------${RESET}"
+    echo -e "${Y}Please wait. This may take a while depending on download speed.${RESET}"
+}
+
+run_silent() {
+    local cmd="$1"
+    local logfile="/tmp/wowstore_install.log"
+    eval "$cmd" >> "$logfile" 2>&1
+    return $?
+}
+
 process_queue() {
     # Takes an array of IDs as input
     local ids_to_process=("$@")
+    local LOGFILE="/tmp/wowstore_install.log"
     
-    # Lists to hold package names for batch installation
+    # Lists to hold package names
     local BATCH_APT=()
     local BATCH_SNAP=()
     local BATCH_FLATPAK=()
-    local DIRECT_DEBS=() # Stores indices for direct debs to process individually
+    local DIRECT_DEBS=() 
     
     local update_apt_needed=false
 
-    echo -e "\n${M}Preparing queue...${RESET}"
+    # --- 1. PRE-CHECK: Sudo & Clear Log ---
+    echo "" > "$LOGFILE"
+    echo -e "\n${C}Authenticating...${RESET}"
+    if ! sudo -v; then
+        echo -e "${R}Authentication failed. Installation aborted.${RESET}"
+        read -r -p "Press Enter to continue..."
+        return
+    fi
 
+    # --- 2. BUILD QUEUES ---
     for id in "${ids_to_process[@]}"; do
         # Trim whitespace
         id=$(echo "$id" | xargs)
-        
-        # Validate ID
         local index=$((id - 1))
-        if [[ $index -lt 0 || $index -ge ${#APP_DB[@]} ]]; then
-            echo -e "${R}Skipping invalid ID: $id${RESET}"
-            continue
-        fi
+        
+        # Validation
+        if [[ $index -lt 0 || $index -ge ${#APP_DB[@]} ]]; then continue; fi
 
         local entry="${APP_DB[$index]}"
         local name=$(echo "$entry" | cut -d'|' -f1)
         local type=$(echo "$entry" | cut -d'|' -f3)
         local pkg=$(echo "$entry" | cut -d'|' -f4)
         local extra=$(echo "$entry" | cut -d'|' -f5)
-        
-        echo -e "Processing: ${W}$name${RESET}..."
 
         case $type in
-            "snap")
-                BATCH_SNAP+=("$pkg $extra")
-                ;;
-            "flatpak")
-                BATCH_FLATPAK+=("$pkg")
-                ;;
-            "apt")
-                BATCH_APT+=("$pkg")
-                ;;
-            "apt-universe")
-                echo -e "  -> Enabling Universe repo..."
-                sudo add-apt-repository universe -y >/dev/null 2>&1
+            "snap") BATCH_SNAP+=("$pkg $extra|$name") ;;
+            "flatpak") BATCH_FLATPAK+=("$pkg|$name") ;;
+            "apt") BATCH_APT+=("$pkg") ;;
+            "apt-universe") 
+                sudo add-apt-repository universe -y >> "$LOGFILE" 2>&1
                 update_apt_needed=true
-                BATCH_APT+=("$pkg")
+                BATCH_APT+=("$pkg") 
                 ;;
             "apt-ppa")
-                echo -e "  -> Adding PPA: $extra..."
-                sudo add-apt-repository -y "$extra" >/dev/null 2>&1
+                sudo add-apt-repository -y "$extra" >> "$LOGFILE" 2>&1
                 update_apt_needed=true
                 BATCH_APT+=("$pkg")
                 ;;
             "apt-key")
-                echo -e "  -> Setting up keys..."
-                eval "$extra"
+                eval "$extra" >> "$LOGFILE" 2>&1
                 update_apt_needed=true
                 BATCH_APT+=("$pkg")
                 ;;
             "deb-repo")
-                echo -e "  -> Configuring repo deb..."
                 local tmp_deb="/tmp/wow_store_repo_setup_$id.deb"
                 wget -q -O "$tmp_deb" "$extra"
-                if [[ -f "$tmp_deb" ]]; then
-                    sudo dpkg -i "$tmp_deb" >/dev/null 2>&1
-                    rm -f "$tmp_deb"
-                    update_apt_needed=true
-                    BATCH_APT+=("$pkg")
-                else
-                    echo -e "${R}Failed to download config for $name${RESET}"
-                fi
+                sudo dpkg -i "$tmp_deb" >> "$LOGFILE" 2>&1
+                rm -f "$tmp_deb"
+                update_apt_needed=true
+                BATCH_APT+=("$pkg")
                 ;;
             "direct-deb")
-                # Store full info to process later
                 DIRECT_DEBS+=("$name|$extra")
                 ;;
         esac
     done
 
-    # --- EXECUTE BATCH INSTALLS ---
+    # --- 3. CALCULATE STEPS ---
+    local total_steps=0
+    local current_step=0
+    
+    [ "$update_apt_needed" = true ] && ((total_steps++))
+    [ ${#BATCH_APT[@]} -gt 0 ] && ((total_steps++))
+    ((total_steps += ${#DIRECT_DEBS[@]}))
+    ((total_steps += ${#BATCH_SNAP[@]}))
+    ((total_steps += ${#BATCH_FLATPAK[@]}))
+    
+    if [ $total_steps -eq 0 ]; then return; fi
 
-    # 1. Update APT if Repos changed
+    # --- 4. EXECUTE WITH PROGRESS UI ---
+    
+    # APT Update
     if [ "$update_apt_needed" = true ]; then
-        echo -e "\n${C}Updating APT Repositories...${RESET}"
-        sudo apt update
+        ((current_step++))
+        local pct=$(( current_step * 100 / total_steps ))
+        draw_install_screen $pct "Updating System Repositories..."
+        if ! run_silent "sudo apt update"; then
+            clear
+            echo -e "${R}Error Updating APT. Log output:${RESET}\n"
+            cat "$LOGFILE"
+            read -r -p "Press Enter to return..."
+            return
+        fi
     fi
 
-    # 2. APT Batch
+    # APT Batch Install
     if [ ${#BATCH_APT[@]} -gt 0 ]; then
-        echo -e "\n${C}Installing APT packages: ${W}${BATCH_APT[*]}${RESET}"
-        sudo apt install -y "${BATCH_APT[@]}"
+        ((current_step++))
+        local pct=$(( current_step * 100 / total_steps ))
+        draw_install_screen $pct "Installing System Packages (APT)..."
+        # Combine array for install
+        if ! run_silent "sudo apt install -y ${BATCH_APT[*]}"; then
+            clear
+            echo -e "${R}Error installing APT packages. Log output:${RESET}\n"
+            cat "$LOGFILE"
+            read -r -p "Press Enter to return..."
+            return
+        fi
     fi
 
-    # 3. Direct Debs (Like Minecraft) - Process AFTER apt update/install
-    if [ ${#DIRECT_DEBS[@]} -gt 0 ]; then
-        for ddeb in "${DIRECT_DEBS[@]}"; do
-            local d_name=$(echo "$ddeb" | cut -d'|' -f1)
-            local d_url=$(echo "$ddeb" | cut -d'|' -f2)
-            local d_file="/tmp/$(basename "$d_url")"
+    # Direct Debs
+    for ddeb in "${DIRECT_DEBS[@]}"; do
+        ((current_step++))
+        local pct=$(( current_step * 100 / total_steps ))
+        local d_name=$(echo "$ddeb" | cut -d'|' -f1)
+        local d_url=$(echo "$ddeb" | cut -d'|' -f2)
+        local d_file="/tmp/$(basename "$d_url")"
+        
+        draw_install_screen $pct "Downloading & Installing $d_name..."
+        
+        wget -q -O "$d_file" "$d_url"
+        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
+             clear
+            echo -e "${R}Error installing $d_name. Log output:${RESET}\n"
+            cat "$LOGFILE"
+            rm -f "$d_file"
+            read -r -p "Press Enter to return..."
+            return
+        fi
+        rm -f "$d_file"
+    done
 
-            echo -e "\n${C}Installing Standalone .deb: ${W}$d_name${RESET}"
-            echo -e "  -> Downloading..."
-            wget -q --show-progress -O "$d_file" "$d_url"
-            
-            if [[ -f "$d_file" ]]; then
-                echo -e "  -> Installing (dpkg)..."
-                sudo dpkg -i "$d_file"
-                echo -e "  -> Resolving dependencies (apt -f install)..."
-                sudo apt-get install -f -y
-                rm -f "$d_file"
-                echo -e "${G}  -> $d_name Installed.${RESET}"
-            else
-                echo -e "${R}  -> Download failed.${RESET}"
-            fi
-        done
-    fi
+    # Snaps
+    for s_item in "${BATCH_SNAP[@]}"; do
+        ((current_step++))
+        local pct=$(( current_step * 100 / total_steps ))
+        local s_cmd=$(echo "$s_item" | cut -d'|' -f1)
+        local s_name=$(echo "$s_item" | cut -d'|' -f2)
+        
+        draw_install_screen $pct "Installing Snap: $s_name..."
+        if ! run_silent "sudo snap install $s_cmd"; then
+            clear
+            echo -e "${R}Error installing $s_name. Log output:${RESET}\n"
+            cat "$LOGFILE"
+            read -r -p "Press Enter to return..."
+            return
+        fi
+    done
 
-    # 4. Snap Batch
-    if [ ${#BATCH_SNAP[@]} -gt 0 ]; then
-        echo -e "\n${C}Installing Snap packages...${RESET}"
-        for snap_cmd in "${BATCH_SNAP[@]}"; do
-            echo -e "Installing Snap: $snap_cmd"
-            sudo snap install $snap_cmd
-        done
-    fi
+    # Flatpaks
+    for f_item in "${BATCH_FLATPAK[@]}"; do
+        ((current_step++))
+        local pct=$(( current_step * 100 / total_steps ))
+        local f_pkg=$(echo "$f_item" | cut -d'|' -f1)
+        local f_name=$(echo "$f_item" | cut -d'|' -f2)
+        
+        draw_install_screen $pct "Installing Flatpak: $f_name..."
+        
+        # Ensure plugin first silently
+        run_silent "sudo apt install -y gnome-software-plugin-flatpak"
+        
+        if ! run_silent "flatpak install --user -y flathub $f_pkg"; then
+            clear
+            echo -e "${R}Error installing $f_name. Log output:${RESET}\n"
+            cat "$LOGFILE"
+            read -r -p "Press Enter to return..."
+            return
+        fi
+    done
 
-    # 5. Flatpak Batch
-    if [ ${#BATCH_FLATPAK[@]} -gt 0 ]; then
-        echo -e "\n${C}Installing Flatpak packages: ${W}${BATCH_FLATPAK[*]}${RESET}"
-        # Ensure plugin exists once
-        sudo apt install -y gnome-software-plugin-flatpak >/dev/null 2>&1
-        # Use --user to avoid prompts about system vs user installation
-        flatpak install --user -y flathub "${BATCH_FLATPAK[@]}"
-    fi
-
-    echo -e "\n${G}Batch processing complete!${RESET}"
+    # Finish
+    draw_install_screen 100 "All tasks completed successfully!"
+    sleep 1.5
 }
 
 # --- MAIN LOOP ---
@@ -493,8 +566,6 @@ while true; do
             if [[ "$INPUT_BUFFER" =~ $regex ]]; then
                 IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
                 process_queue "${ADDR[@]}"
-                echo -e "\n${G}Press Enter to continue.${RESET}"
-                read -r
                 INPUT_BUFFER="" # Clear after success
             else
                 INPUT_BUFFER="" # Clear invalid
