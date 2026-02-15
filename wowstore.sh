@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.1"
+VERSION="2.2"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -22,12 +22,6 @@ BOLD=$'\033[1m'
 BG_BLUE=$'\033[44m'
 BG_MAG=$'\033[45m'
 RESET=$'\033[0m'
-
-# --- DATA STORAGE (V2) ---
-DATA_DIR="$HOME/.local/share/wowstore"
-INSTALLED_DB="$DATA_DIR/installed.db"
-mkdir -p "$DATA_DIR"
-touch "$INSTALLED_DB"
 
 # --- ARGUMENT PARSING ---
 FORCE_UPDATE=false
@@ -202,47 +196,58 @@ SEARCH_TERM=""
 FILTERED_INDICES=()
 VIEW_MODE="BROWSE" # "BROWSE" or "LIBRARY"
 
-# --- LIBRARY FUNCTIONS (V2) ---
+# --- LIBRARY FUNCTIONS (V2.2 - System Detection) ---
 declare -A INSTALLED_MAP
 declare -a INSTALLED_LIST
 
 load_installed() {
     INSTALLED_LIST=()
     INSTALLED_MAP=()
-    if [[ -f "$INSTALLED_DB" ]]; then
-        while IFS='|' read -r name type pkg; do
-            if [[ -n "$name" ]]; then
-                # Clean up carriage returns/spaces just in case
-                name=$(echo "$name" | xargs)
-                INSTALLED_LIST+=("$name|$type|$pkg")
-                INSTALLED_MAP["$name"]=1
-            fi
-        done < "$INSTALLED_DB"
-    fi
-}
+    
+    # Declare associative arrays for fast lookup of system packages
+    declare -A SYS_DEBS
+    declare -A SYS_SNAPS
+    declare -A SYS_FLATPAKS
 
-track_install() {
-    local name="$1"
-    local type="$2"
-    local pkg="$3"
-    # Remove existing to update info
-    if [[ -f "$INSTALLED_DB" ]]; then
-        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null 
-        mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+    # Load Debs
+    if command -v dpkg-query >/dev/null; then
+        while read -r pkg; do SYS_DEBS["$pkg"]=1; done < <(dpkg-query -W -f='${Package}\n' 2>/dev/null)
     fi
-    echo "$name|$type|$pkg" >> "$INSTALLED_DB"
-    load_installed
-}
 
-track_remove() {
-    local name="$1"
-    if [[ -f "$INSTALLED_DB" ]]; then
-        # Use grep -v to filter out the line. 
-        # Do NOT link with && mv, because if grep -v produces empty output (empty db), exit code is 1
-        grep -v "^$name|" "$INSTALLED_DB" > "${INSTALLED_DB}.tmp" 2>/dev/null
-        mv "${INSTALLED_DB}.tmp" "$INSTALLED_DB"
+    # Load Snaps (skip header)
+    if command -v snap >/dev/null; then
+        while read -r name; do SYS_SNAPS["$name"]=1; done < <(snap list 2>/dev/null | awk 'NR>1 {print $1}')
     fi
-    load_installed
+
+    # Load Flatpaks
+    if command -v flatpak >/dev/null; then
+        while read -r appid; do SYS_FLATPAKS["$appid"]=1; done < <(flatpak list --app --columns=application)
+    fi
+
+    # Check Catalogue against System
+    for entry in "${APP_DB[@]}"; do
+        local name=$(echo "$entry" | cut -d'|' -f1)
+        local type=$(echo "$entry" | cut -d'|' -f3)
+        local pkg=$(echo "$entry" | cut -d'|' -f4)
+        local installed=false
+
+        case $type in
+            "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb")
+                if [[ -n "${SYS_DEBS[$pkg]}" ]]; then installed=true; fi
+                ;;
+            "snap")
+                if [[ -n "${SYS_SNAPS[$pkg]}" ]]; then installed=true; fi
+                ;;
+            "flatpak")
+                if [[ -n "${SYS_FLATPAKS[$pkg]}" ]]; then installed=true; fi
+                ;;
+        esac
+
+        if [ "$installed" = true ]; then
+            INSTALLED_MAP["$name"]=1
+            INSTALLED_LIST+=("$name|$type|$pkg")
+        fi
+    done
 }
 
 # --- INITIALIZATION ---
@@ -461,9 +466,7 @@ process_install_queue() {
         local apt_pkgs=""
         for item in "${BATCH_APT[@]}"; do apt_pkgs+="$(echo "$item" | cut -d'|' -f1) "; done
         
-        if run_silent "sudo apt install -y $apt_pkgs"; then
-            for item in "${BATCH_APT[@]}"; do track_install "$(echo "$item" | cut -d'|' -f2)" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"; done
-        else
+        if ! run_silent "sudo apt install -y $apt_pkgs"; then
             clear; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     fi
@@ -472,9 +475,7 @@ process_install_queue() {
         ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing $(echo "$item" | cut -d'|' -f1)..."
         local d_url=$(echo "$item" | cut -d'|' -f2); local d_file="/tmp/$(basename "$d_url")"
         wget -q -O "$d_file" "$d_url"
-        if run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
-            track_install "$(echo "$item" | cut -d'|' -f1)" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
-        else
+        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
             clear; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return
         fi
         rm -f "$d_file"
@@ -483,9 +484,7 @@ process_install_queue() {
     for item in "${BATCH_SNAP[@]}"; do
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Snap: $name..."
-        if run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then
-            track_install "$name" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
-        else
+        if ! run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then
             clear; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     done
@@ -494,15 +493,16 @@ process_install_queue() {
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Flatpak: $name..."
         run_silent "sudo apt install -y gnome-software-plugin-flatpak"
-        if run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then
-            track_install "$name" "$(echo "$item" | cut -d'|' -f3)" "$(echo "$item" | cut -d'|' -f4)"
-        else
+        if ! run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then
             clear; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
         fi
     done
 
     draw_install_screen 100 "Done!"
     sleep 1
+    # Refresh State from System
+    load_installed
+    init_filter
 }
 
 # --- UNINSTALL/UPDATE LOGIC ---
@@ -550,9 +550,7 @@ process_library_queue() {
                     run_silent "sudo apt remove -y $pkg" && success=true ;;
             esac
 
-            if [ "$success" = true ]; then
-                track_remove "$name"
-            else
+            if [ "$success" = false ]; then
                 clear; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r
             fi
         
@@ -571,6 +569,7 @@ process_library_queue() {
     draw_install_screen 100 "Tasks Completed"
     sleep 1
     # Reload list to reflect changes
+    load_installed
     init_filter
 }
 
