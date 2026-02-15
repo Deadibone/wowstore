@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.13"
+VERSION="1.14"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -509,7 +509,8 @@ while true; do
         echo "" # Newline after Enter
         
         # Process the full buffer if it matches valid pattern
-        if [[ "$input_buffer" =~ ^[0-9, ]+$ ]]; then
+        local regex='^[0-9, ]+$'
+        if [[ "$input_buffer" =~ $regex ]]; then
             IFS=',' read -ra ADDR <<< "$input_buffer"
             process_queue "${ADDR[@]}"
             echo -e "\n${G}Press Enter to continue.${RESET}"
