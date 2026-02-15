@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="1.8"
+VERSION="1.9"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -471,7 +471,9 @@ while true; do
             ;;
         *)
             # Handle list of numbers
-            if [[ "$input" =~ ^[0-9, ]+$ ]]; then
+            # Define regex in variable to prevent syntax errors with spaces
+            regex='^[0-9, ]+$'
+            if [[ "$input" =~ $regex ]]; then
                 IFS=',' read -ra ADDR <<< "$input"
                 process_queue "${ADDR[@]}"
                 echo -e "\n${G}Press Enter to continue.${RESET}"
