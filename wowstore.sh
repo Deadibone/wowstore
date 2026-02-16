@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.7"
+VERSION="2.8"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 DB_URL="https://raw.githubusercontent.com/Deadibone/wowstore/refs/heads/main/applist.db"
@@ -262,23 +262,27 @@ init_filter() {
 # --- GUI FUNCTIONS ---
 
 draw_header() {
-    clear
-    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}v${VERSION}${RESET}"
+    # Move cursor to top-left instead of clearing whole screen (Fixes flickering)
+    printf '\033[H'
+    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}v${VERSION}${RESET}\033[K"
     if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-        echo -e "${M}------------------------------------------------------------${RESET}"
-        echo -e " ${C}MODE:${RESET} ${W}${BOLD}BROWSE${RESET}  ${Y}[L] Go to Library${RESET}"
+        echo -e "${M}------------------------------------------------------------${RESET}\033[K"
+        echo -e " ${C}MODE:${RESET} ${W}${BOLD}BROWSE${RESET}  ${Y}[L] Go to Library${RESET}\033[K"
     else
-        echo -e "${M}------------------------------------------------------------${RESET}"
-        echo -e " ${C}MODE:${RESET} ${G}${BOLD}LIBRARY (Installed)${RESET}  ${Y}[L] Go to Browse${RESET}"
+        echo -e "${M}------------------------------------------------------------${RESET}\033[K"
+        echo -e " ${C}MODE:${RESET} ${G}${BOLD}LIBRARY (Installed)${RESET}  ${Y}[L] Go to Browse${RESET}\033[K"
     fi
     
-    echo -e "${M}------------------------------------------------------------${RESET}"
+    echo -e "${M}------------------------------------------------------------${RESET}\033[K"
     if [[ -n "$SEARCH_TERM" ]]; then
-        echo -e "${Y}Search: '${W}$SEARCH_TERM${Y}'${RESET}"
+        echo -e "${Y}Search: '${W}$SEARCH_TERM${Y}'${RESET}\033[K"
+    else
+        # Print empty line to maintain height stability if search is cleared
+        echo -e "\033[K" 
     fi
     
-    printf "${BOLD}%-4s %-22s %-10s %-30s${RESET}\n" "ID" "Name" "Type" "Status/Desc"
-    echo -e "${B}------------------------------------------------------------${RESET}"
+    printf "${BOLD}%-4s %-22s %-10s %-30s${RESET}\033[K\n" "ID" "Name" "Type" "Status/Desc"
+    echo -e "${B}------------------------------------------------------------${RESET}\033[K"
 }
 
 draw_list() {
@@ -292,9 +296,11 @@ draw_list() {
         end_index=$(( APPS_PER_PAGE - 1 ))
     fi
 
-    local count=0
-    for i in "${FILTERED_INDICES[@]}"; do
-        if [[ $count -ge $start_index && $count -le $end_index ]]; then
+    local lines_printed=0
+    # Use C-style for loop for reliable counting
+    for (( i=start_index; i<=end_index; i++ )); do
+        if [[ -n "${FILTERED_INDICES[$i]}" ]]; then
+            local idx=${FILTERED_INDICES[$i]}
             local entry=""
             local name=""
             local type=""
@@ -302,7 +308,7 @@ draw_list() {
             local status_display=""
             
             if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-                entry="${APP_DB[$i]}"
+                entry="${APP_DB[$idx]}"
                 name=$(echo "$entry" | cut -d'|' -f1)
                 desc=$(echo "$entry" | cut -d'|' -f2)
                 type=$(echo "$entry" | cut -d'|' -f3)
@@ -317,7 +323,7 @@ draw_list() {
                 fi
             else
                 # Library Mode
-                entry="${INSTALLED_LIST[$i]}"
+                entry="${INSTALLED_LIST[$idx]}"
                 name=$(echo "$entry" | cut -d'|' -f1)
                 type=$(echo "$entry" | cut -d'|' -f2)
                 status_display="${G}Ready${RESET}"
@@ -337,26 +343,34 @@ draw_list() {
                 row_name_color=$G
             fi
 
-            printf "${C}%-4s${RESET} ${row_name_color}%-22s${RESET} ${type_color}%-10s${RESET} %-30s\n" "$((i+1))" "$name" "$type" "$status_display"
+            # Print line with Clear-To-EOL (\033[K)
+            printf "${C}%-4s${RESET} ${row_name_color}%-22s${RESET} ${type_color}%-10s${RESET} %-30s\033[K\n" "$((idx+1))" "$name" "$type" "$status_display"
+            ((lines_printed++))
         fi
-        ((count++))
     done
     
-    echo -e "${B}------------------------------------------------------------${RESET}"
+    # Pad remaining lines to keep UI stable
+    for (( j=lines_printed; j<APPS_PER_PAGE; j++ )); do
+        echo -e "\033[K"
+    done
+    
+    echo -e "${B}------------------------------------------------------------${RESET}\033[K"
     local total_pages=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
     [ $total_pages -eq 0 ] && total_pages=1
-    echo -e "Page: ${W}$CURRENT_PAGE / $total_pages${RESET} | Total: ${W}$total_items${RESET}"
+    echo -e "Page: ${W}$CURRENT_PAGE / $total_pages${RESET} | Total: ${W}$total_items${RESET}\033[K"
 }
 
 draw_footer() {
-    echo -e "${M}------------------------------------------------------------${RESET}"
-    echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[L]${RESET} Mode  ${Y}[Q]${RESET} Quit"
+    echo -e "${M}------------------------------------------------------------${RESET}\033[K"
+    echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[L]${RESET} Mode  ${Y}[Q]${RESET} Quit\033[K"
     if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-        echo -e "${G}Install:${RESET} Type ID(s) then Enter"
+        echo -e "${G}Install:${RESET} Type ID(s) then Enter\033[K"
     else
-        echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
+        echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update\033[K"
     fi
-    echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}"
+    echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}\033[K"
+    # Clear anything below this point (residue from longer previous screens)
+    echo -e "\033[J"
 }
 
 # --- UI HELPERS ---
@@ -365,16 +379,18 @@ draw_install_screen() {
     local bar_width=40
     local completed=$(( bar_width * percent / 100 ))
     local remaining=$(( bar_width - completed ))
-    clear
-    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}Processing...${RESET}"
-    echo -e "${M}------------------------------------------------------------${RESET}\n\n"
+    # Use Home cursor instead of clear for smoother progress
+    printf '\033[H'
+    echo -e "${BG_MAG}${W}${BOLD}  WOW APP STORE  ${RESET} ${C}Processing...${RESET}\033[K"
+    echo -e "${M}------------------------------------------------------------${RESET}\033[K\n\n\033[K"
     echo -ne "    ${BOLD}[${G}"
     for ((i=0; i<completed; i++)); do echo -n "#"; done
     echo -ne "${RESET}"
     for ((i=0; i<remaining; i++)); do echo -n "."; done
-    echo -ne "${BOLD}] ${percent}%${RESET}\n\n"
-    echo -e "    ${C}Status:${RESET} ${W}${msg}${RESET}\n\n"
-    echo -e "${M}------------------------------------------------------------${RESET}"
+    echo -ne "${BOLD}] ${percent}%${RESET}\n\n\033[K"
+    echo -e "    ${C}Status:${RESET} ${W}${msg}${RESET}\033[K\n\n\033[K"
+    echo -e "${M}------------------------------------------------------------${RESET}\033[K"
+    echo -e "\033[J" # Clear rest
 }
 
 run_silent() {
@@ -440,33 +456,34 @@ process_install_queue() {
     if [ ${#BATCH_APT[@]} -gt 0 ]; then
         ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing System Packages..."
         local apt_pkgs=""; for item in "${BATCH_APT[@]}"; do apt_pkgs+="$(echo "$item" | cut -d'|' -f1) "; done
-        if ! run_silent "sudo apt install -y $apt_pkgs"; then clear; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
+        if ! run_silent "sudo apt install -y $apt_pkgs"; then printf '\033[H\033[2J'; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     fi
 
     for item in "${DIRECT_DEBS[@]}"; do
         ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing $(echo "$item" | cut -d'|' -f1)..."
         local d_url=$(echo "$item" | cut -d'|' -f2); local d_file="/tmp/$(basename "$d_url")"
         wget -q -O "$d_file" "$d_url"
-        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then clear; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return; fi
+        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then printf '\033[H\033[2J'; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return; fi
         rm -f "$d_file"
     done
 
     for item in "${BATCH_SNAP[@]}"; do
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Snap: $name..."
-        if ! run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then clear; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
+        if ! run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then printf '\033[H\033[2J'; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     done
 
     for item in "${BATCH_FLATPAK[@]}"; do
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Flatpak: $name..."
         run_silent "sudo apt install -y gnome-software-plugin-flatpak"
-        if ! run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then clear; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
+        if ! run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then printf '\033[H\033[2J'; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     done
 
     draw_install_screen 100 "Done!"
     sleep 1
     load_installed; init_filter
+    printf '\033[H\033[2J' # Full clear after install to reset view
 }
 
 # --- UNINSTALL/UPDATE LOGIC ---
@@ -509,7 +526,7 @@ process_library_queue() {
                 "flatpak") if run_silent "flatpak uninstall --user -y $pkg"; then success=true; elif run_silent "flatpak uninstall -y $pkg"; then success=true; fi ;;
                 "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") run_silent "sudo apt remove -y $pkg" && success=true ;;
             esac
-            if [ "$success" = false ]; then clear; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r; fi
+            if [ "$success" = false ]; then printf '\033[H\033[2J'; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r; fi
         
         elif [[ "$action" == "1" ]]; then
             draw_install_screen $((current_step*100/total_steps)) "Updating/Reinstalling $name..."
@@ -524,6 +541,7 @@ process_library_queue() {
     draw_install_screen 100 "Tasks Completed"
     sleep 1
     load_installed; init_filter
+    printf '\033[H\033[2J' # Full clear after processing
 }
 
 # --- MAIN LOOP ---
@@ -543,6 +561,9 @@ load_app_db
 # Load initial installed state
 load_installed
 init_filter
+
+# Initial Full Clear
+printf '\033[H\033[2J'
 
 INPUT_BUFFER="" # Initialize buffer
 NEEDS_REDRAW=true
@@ -622,7 +643,9 @@ while true; do
     if [[ -z "$INPUT_BUFFER" ]]; then
         if [[ "$key" == "s" || "$key" == "S" ]]; then
             echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
-            read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
+            read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; 
+            printf '\033[H\033[2J' # Full clear after search input to clean up "Enter search term" line
+            continue
         elif [[ "$key" == "l" || "$key" == "L" ]]; then
             if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
             CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
