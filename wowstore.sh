@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.3"
+VERSION="2.4"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -97,9 +97,6 @@ install_to_path() {
 APPS_PER_PAGE=10
 
 # --- APP CATALOGUE (MODULAR) ---
-# Format: "Name|Description|Type|PackageID|Repo/Command/URL"
-# Type options: apt, snap, flatpak, apt-ppa, apt-universe, apt-key, deb-repo, direct-deb
-
 declare -a APP_DB
 APP_DB=(
     "Chromium|Open Source Web Browser|apt|chromium-browser|"
@@ -192,9 +189,11 @@ unset IFS
 
 # --- GLOBAL VARIABLES & STATE ---
 CURRENT_PAGE=1
-SEARCH_TERM=""
 FILTERED_INDICES=()
 VIEW_MODE="BROWSE" # "BROWSE" or "LIBRARY"
+INPUT_MODE="COMMAND" # "COMMAND" or "SEARCH"
+INPUT_BUFFER=""      # Holds the IDs (e.g. "1, 2")
+SEARCH_BUFFER=""     # Holds the search text
 
 # --- LIBRARY FUNCTIONS (V2.3 - System Detection) ---
 declare -A INSTALLED_MAP
@@ -204,28 +203,20 @@ load_installed() {
     INSTALLED_LIST=()
     INSTALLED_MAP=()
     
-    # Declare associative arrays for fast lookup of system packages
-    # Explicitly clear them to avoid persistence across reloads
     unset SYS_DEBS; declare -A SYS_DEBS
     unset SYS_SNAPS; declare -A SYS_SNAPS
     unset SYS_FLATPAKS; declare -A SYS_FLATPAKS
 
-    # Load Debs
     if command -v dpkg-query >/dev/null; then
         while read -r pkg; do SYS_DEBS["$pkg"]=1; done < <(dpkg-query -W -f='${Package}\n' 2>/dev/null)
     fi
-
-    # Load Snaps (skip header)
     if command -v snap >/dev/null; then
         while read -r name; do SYS_SNAPS["$name"]=1; done < <(snap list 2>/dev/null | awk 'NR>1 {print $1}')
     fi
-
-    # Load Flatpaks
     if command -v flatpak >/dev/null; then
         while read -r appid; do SYS_FLATPAKS["$appid"]=1; done < <(flatpak list --app --columns=application)
     fi
 
-    # Check Catalogue against System
     for entry in "${APP_DB[@]}"; do
         local name=$(echo "$entry" | cut -d'|' -f1)
         local type=$(echo "$entry" | cut -d'|' -f3)
@@ -234,14 +225,11 @@ load_installed() {
 
         case $type in
             "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb")
-                if [[ -n "${SYS_DEBS[$pkg]}" ]]; then installed=true; fi
-                ;;
+                if [[ -n "${SYS_DEBS[$pkg]}" ]]; then installed=true; fi ;;
             "snap")
-                if [[ -n "${SYS_SNAPS[$pkg]}" ]]; then installed=true; fi
-                ;;
+                if [[ -n "${SYS_SNAPS[$pkg]}" ]]; then installed=true; fi ;;
             "flatpak")
-                if [[ -n "${SYS_FLATPAKS[$pkg]}" ]]; then installed=true; fi
-                ;;
+                if [[ -n "${SYS_FLATPAKS[$pkg]}" ]]; then installed=true; fi ;;
         esac
 
         if [ "$installed" = true ]; then
@@ -258,12 +246,12 @@ init_filter() {
     if [[ "$VIEW_MODE" == "BROWSE" ]]; then
         local i=0
         for app in "${APP_DB[@]}"; do
-            if [[ -z "$SEARCH_TERM" ]]; then
+            if [[ -z "$SEARCH_BUFFER" ]]; then
                 FILTERED_INDICES+=($i)
             else
                 local name=$(echo "$app" | cut -d'|' -f1)
                 local desc=$(echo "$app" | cut -d'|' -f2)
-                if echo "$name $desc" | grep -iq "$SEARCH_TERM"; then
+                if echo "$name $desc" | grep -iq "$SEARCH_BUFFER"; then
                     FILTERED_INDICES+=($i)
                 fi
             fi
@@ -273,11 +261,11 @@ init_filter() {
         # Library Mode
         local i=0
         for app in "${INSTALLED_LIST[@]}"; do
-            if [[ -z "$SEARCH_TERM" ]]; then
+            if [[ -z "$SEARCH_BUFFER" ]]; then
                 FILTERED_INDICES+=($i)
             else
                 local name=$(echo "$app" | cut -d'|' -f1)
-                if echo "$name" | grep -iq "$SEARCH_TERM"; then
+                if echo "$name" | grep -iq "$SEARCH_BUFFER"; then
                     FILTERED_INDICES+=($i)
                 fi
             fi
@@ -300,9 +288,10 @@ draw_header() {
     fi
     
     echo -e "${M}------------------------------------------------------------${RESET}"
-    if [[ -n "$SEARCH_TERM" ]]; then
-        echo -e "${Y}Search: '${W}$SEARCH_TERM${Y}'${RESET}"
-    fi
+    
+    # We no longer show a separate "Search:" line here, 
+    # it is now part of the interactive footer in search mode
+    
     printf "${BOLD}%-4s %-22s %-10s %-30s${RESET}\n" "ID" "Name" "Type" "Status/Desc"
     echo -e "${B}------------------------------------------------------------${RESET}"
 }
@@ -326,7 +315,6 @@ draw_list() {
             local type=""
             local desc=""
             local status_display=""
-            local name_display=""
             
             if [[ "$VIEW_MODE" == "BROWSE" ]]; then
                 entry="${APP_DB[$i]}"
@@ -339,19 +327,15 @@ draw_list() {
                 # Check installed status
                 if [[ -n "${INSTALLED_MAP["$name"]}" ]]; then
                     status_display="${G}[✔] Installed${RESET}"
-                    name_display="${G}$name${RESET}"
                 else
                     status_display="$desc"
-                    name_display="${BOLD}$name${RESET}"
                 fi
             else
                 # Library Mode
                 entry="${INSTALLED_LIST[$i]}"
                 name=$(echo "$entry" | cut -d'|' -f1)
                 type=$(echo "$entry" | cut -d'|' -f2)
-                desc="Manage this app"
                 status_display="${G}Ready${RESET}"
-                name_display="${BOLD}$name${RESET}"
             fi
             
             # Color code types
@@ -363,7 +347,6 @@ draw_list() {
                 *) type_color=$Y ;;
             esac
 
-            # Separate color from name for printf width calc to work
             local row_name_color=$BOLD
             if [[ -n "${INSTALLED_MAP["$name"]}" && "$VIEW_MODE" == "BROWSE" ]]; then
                 row_name_color=$G
@@ -383,12 +366,23 @@ draw_list() {
 draw_footer() {
     echo -e "${M}------------------------------------------------------------${RESET}"
     echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[L]${RESET} Mode  ${Y}[Q]${RESET} Quit"
-    if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-        echo -e "${G}Install:${RESET} Type ID(s) then Enter"
+    
+    # Conditional Footer based on Input Mode
+    if [[ "$INPUT_MODE" == "SEARCH" ]]; then
+        echo -n -e "${Y}${BOLD}Search > [ ${SEARCH_BUFFER} ]${RESET}"
     else
-        echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
+        if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+            echo -e "${G}Install:${RESET} Type ID(s) then Enter"
+        else
+            echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
+        fi
+        # Display ID input with visual braces
+        if [[ -n "$INPUT_BUFFER" ]]; then
+            echo -n -e "${BOLD}Action > [ ${INPUT_BUFFER} ]${RESET}"
+        else
+            echo -n -e "${BOLD}Action > [ ]${RESET}"
+        fi
     fi
-    echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}"
 }
 
 # --- UI HELPERS ---
@@ -458,7 +452,6 @@ process_install_queue() {
         esac
     done
 
-    # Calc steps
     local total_steps=0; local current_step=0
     [ "$update_apt_needed" = true ] && ((total_steps++))
     [ ${#BATCH_APT[@]} -gt 0 ] && ((total_steps++))
@@ -472,47 +465,34 @@ process_install_queue() {
 
     if [ ${#BATCH_APT[@]} -gt 0 ]; then
         ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing System Packages..."
-        # Extract just pkg names for apt command
-        local apt_pkgs=""
-        for item in "${BATCH_APT[@]}"; do apt_pkgs+="$(echo "$item" | cut -d'|' -f1) "; done
-        
-        if ! run_silent "sudo apt install -y $apt_pkgs"; then
-            clear; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
-        fi
+        local apt_pkgs=""; for item in "${BATCH_APT[@]}"; do apt_pkgs+="$(echo "$item" | cut -d'|' -f1) "; done
+        if ! run_silent "sudo apt install -y $apt_pkgs"; then clear; echo -e "${R}APT Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     fi
 
     for item in "${DIRECT_DEBS[@]}"; do
         ((current_step++)); draw_install_screen $((current_step*100/total_steps)) "Installing $(echo "$item" | cut -d'|' -f1)..."
         local d_url=$(echo "$item" | cut -d'|' -f2); local d_file="/tmp/$(basename "$d_url")"
         wget -q -O "$d_file" "$d_url"
-        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then
-            clear; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return
-        fi
+        if ! run_silent "sudo dpkg -i \"$d_file\" && sudo apt-get install -f -y"; then clear; echo -e "${R}Install Error. Log:${RESET}"; cat "$LOGFILE"; rm "$d_file"; read -r; return; fi
         rm -f "$d_file"
     done
 
     for item in "${BATCH_SNAP[@]}"; do
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Snap: $name..."
-        if ! run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then
-            clear; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
-        fi
+        if ! run_silent "sudo snap install $(echo "$item" | cut -d'|' -f1)"; then clear; echo -e "${R}Snap Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     done
 
     for item in "${BATCH_FLATPAK[@]}"; do
         ((current_step++)); local name=$(echo "$item" | cut -d'|' -f2)
         draw_install_screen $((current_step*100/total_steps)) "Installing Flatpak: $name..."
         run_silent "sudo apt install -y gnome-software-plugin-flatpak"
-        if ! run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then
-            clear; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return
-        fi
+        if ! run_silent "flatpak install --user -y flathub $(echo "$item" | cut -d'|' -f1)"; then clear; echo -e "${R}Flatpak Error. Log:${RESET}"; cat "$LOGFILE"; read -r; return; fi
     done
 
     draw_install_screen 100 "Done!"
     sleep 1
-    # Refresh State from System
-    load_installed
-    init_filter
+    load_installed; init_filter
 }
 
 # --- UNINSTALL/UPDATE LOGIC ---
@@ -520,7 +500,6 @@ process_library_queue() {
     local ids_to_process=("$@")
     local LOGFILE="/tmp/wowstore_install.log"
     
-    # Prompt for action
     echo -e "\n\n${C}Selected ${#ids_to_process[@]} app(s).${RESET}"
     echo -e "${Y}[1]${RESET} Update / Reinstall"
     echo -e "${R}[2]${RESET} Uninstall"
@@ -549,45 +528,28 @@ process_library_queue() {
         local pkg=$(echo "$entry" | cut -d'|' -f3)
 
         if [[ "$action" == "2" ]]; then
-            # UNINSTALL
             draw_install_screen $((current_step*100/total_steps)) "Uninstalling $name..."
             local success=false
-            
             case $type in
                 "snap") run_silent "sudo snap remove $pkg" && success=true ;;
-                "flatpak") 
-                    # Try user uninstall first, then generic uninstall
-                    if run_silent "flatpak uninstall --user -y $pkg"; then
-                        success=true
-                    elif run_silent "flatpak uninstall -y $pkg"; then
-                        success=true
-                    fi
-                    ;;
-                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") 
-                    run_silent "sudo apt remove -y $pkg" && success=true ;;
+                "flatpak") if run_silent "flatpak uninstall --user -y $pkg"; then success=true; elif run_silent "flatpak uninstall -y $pkg"; then success=true; fi ;;
+                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") run_silent "sudo apt remove -y $pkg" && success=true ;;
             esac
-
-            if [ "$success" = false ]; then
-                clear; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r
-            fi
+            if [ "$success" = false ]; then clear; echo -e "${R}Error removing $name. Log:${RESET}"; cat "$LOGFILE"; read -r; fi
         
         elif [[ "$action" == "1" ]]; then
-            # UPDATE / REINSTALL
             draw_install_screen $((current_step*100/total_steps)) "Updating/Reinstalling $name..."
             case $type in
                 "snap") run_silent "sudo snap refresh $pkg || sudo snap install $pkg" ;;
                 "flatpak") run_silent "flatpak update -y $pkg || flatpak install --user -y flathub $pkg" ;;
-                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") 
-                    run_silent "sudo apt install --only-upgrade -y $pkg || sudo apt install -y $pkg" ;;
+                "apt"|"apt-universe"|"apt-ppa"|"apt-key"|"deb-repo"|"direct-deb") run_silent "sudo apt install --only-upgrade -y $pkg || sudo apt install -y $pkg" ;;
             esac
         fi
     done
     
     draw_install_screen 100 "Tasks Completed"
     sleep 1
-    # Reload list to reflect changes
-    load_installed
-    init_filter
+    load_installed; init_filter
 }
 
 # --- MAIN LOOP ---
@@ -599,6 +561,7 @@ install_to_path
 init_filter
 
 INPUT_BUFFER="" # Initialize buffer
+SEARCH_BUFFER="" # Search buffer
 
 while true; do
     draw_header
@@ -608,57 +571,103 @@ while true; do
     # Read one character silently
     IFS= read -rsn1 key
     
-    # Handle Enter (Empty key)
-    if [[ -z "$key" ]]; then
-        if [[ -n "$INPUT_BUFFER" ]]; then
-            regex='^[0-9, ]+$'
-            if [[ "$INPUT_BUFFER" =~ $regex ]]; then
-                IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
-                if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-                    process_install_queue "${ADDR[@]}"
-                else
-                    process_library_queue "${ADDR[@]}"
-                fi
-                INPUT_BUFFER=""
-                # Reset search if needed to show updated status
+    # Handle Escape Sequences (Arrows / Esc)
+    if [[ "$key" == $'\e' ]]; then
+        # Read next 2 chars with very short timeout
+        read -rsn2 -t 0.01 next
+        if [[ -z "$next" ]]; then
+            # Pure ESC key pressed
+            if [[ "$INPUT_MODE" == "SEARCH" ]]; then
+                INPUT_MODE="COMMAND"
+                SEARCH_BUFFER=""
+                SEARCH_TERM="" # Clear filter immediately
                 init_filter
             else
-                INPUT_BUFFER=""
+                INPUT_BUFFER="" # Clear IDs if in command mode
             fi
-        fi
-        continue
-    fi
-
-    # Handle Backspace
-    if [[ "$key" == $'\x7f' || "$key" == $'\x08' ]]; then
-        if [[ -n "$INPUT_BUFFER" ]]; then INPUT_BUFFER="${INPUT_BUFFER%?}"; fi
-        continue
-    fi
-
-    # Handle Escape Sequences (Arrows)
-    if [[ "$key" == $'\e' ]]; then
-        read -rsn2 -t 0.01 next
-        if [[ "$next" == "[C" ]]; then 
+        elif [[ "$next" == "[C" ]]; then 
+            # Right Arrow
             total_items=${#FILTERED_INDICES[@]}
             max_page=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
             if [[ $CURRENT_PAGE -lt $max_page ]]; then ((CURRENT_PAGE++)); fi
         elif [[ "$next" == "[D" ]]; then 
+            # Left Arrow
             if [[ $CURRENT_PAGE -gt 1 ]]; then ((CURRENT_PAGE--)); fi
         fi
         continue
     fi
 
-    # Handle Single Key Commands (Only if buffer is empty, to allow typing numbers)
-    if [[ -z "$INPUT_BUFFER" ]]; then
-        if [[ "$key" == "s" || "$key" == "S" ]]; then
-            echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
-            read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
-        elif [[ "$key" == "l" || "$key" == "L" ]]; then
-            if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
-            CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
-        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
-            echo -e "\n${C}Goodbye!${RESET}"; exit 0
+    # Handle Enter
+    if [[ -z "$key" ]]; then
+        if [[ "$INPUT_MODE" == "SEARCH" ]]; then
+            # Commit search (already updated incrementally) and switch back
+            INPUT_MODE="COMMAND"
+        else
+            if [[ -n "$INPUT_BUFFER" ]]; then
+                regex='^[0-9, ]+$'
+                if [[ "$INPUT_BUFFER" =~ $regex ]]; then
+                    IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
+                    if [[ "$VIEW_MODE" == "BROWSE" ]]; then process_install_queue "${ADDR[@]}"; else process_library_queue "${ADDR[@]}"; fi
+                    INPUT_BUFFER=""
+                    init_filter
+                else
+                    INPUT_BUFFER=""
+                fi
+            fi
         fi
+        continue
+    fi
+
+    # Handle Backspace (127 or 8)
+    if [[ "$key" == $'\x7f' || "$key" == $'\x08' ]]; then
+        if [[ "$INPUT_MODE" == "SEARCH" ]]; then
+            if [[ -n "$SEARCH_BUFFER" ]]; then 
+                SEARCH_BUFFER="${SEARCH_BUFFER%?}"
+                SEARCH_TERM="$SEARCH_BUFFER"
+                CURRENT_PAGE=1
+                init_filter
+            fi
+        else
+            if [[ -n "$INPUT_BUFFER" ]]; then INPUT_BUFFER="${INPUT_BUFFER%?}"; fi
+        fi
+        continue
+    fi
+
+    # Input Mode: SEARCH
+    if [[ "$INPUT_MODE" == "SEARCH" ]]; then
+        # Accept printable characters
+        if [[ "$key" =~ [[:print:]] ]]; then
+            SEARCH_BUFFER+="$key"
+            SEARCH_TERM="$SEARCH_BUFFER"
+            CURRENT_PAGE=1
+            init_filter
+        fi
+        continue
+    fi
+
+    # Input Mode: COMMAND
+    # Handle Single Key Commands (Only if not typing a number list, OR special logic)
+    
+    # Allow switching to search mode ANYTIME (even if buffer has numbers)
+    # This clears the ID buffer and switches to Search
+    if [[ "$key" == "s" || "$key" == "S" ]]; then
+        INPUT_MODE="SEARCH"
+        INPUT_BUFFER=""
+        SEARCH_BUFFER="" # Reset search on new entry
+        continue
+    fi
+
+    # Other commands only if buffer empty to avoid conflict with typing?
+    # Actually, we can just check if buffer is empty for 'l' and 'q' 
+    # to allow them as commands, but if buffer has numbers, maybe block?
+    # But 'q' is not a number. 'l' is not a number.
+    # So we can just check the key.
+    
+    if [[ "$key" == "l" || "$key" == "L" ]]; then
+        if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
+        CURRENT_PAGE=1; SEARCH_TERM=""; SEARCH_BUFFER=""; init_filter; continue
+    elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+        echo -e "\n${C}Goodbye!${RESET}"; exit 0
     fi
 
     # Handle Digits, Comma, Space (Input Buffer)
