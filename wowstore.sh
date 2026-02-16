@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.4"
+VERSION="2.5"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 
@@ -189,11 +189,10 @@ unset IFS
 
 # --- GLOBAL VARIABLES & STATE ---
 CURRENT_PAGE=1
+SEARCH_TERM=""
 FILTERED_INDICES=()
 VIEW_MODE="BROWSE" # "BROWSE" or "LIBRARY"
-INPUT_MODE="COMMAND" # "COMMAND" or "SEARCH"
 INPUT_BUFFER=""      # Holds the IDs (e.g. "1, 2")
-SEARCH_BUFFER=""     # Holds the search text
 
 # --- LIBRARY FUNCTIONS (V2.3 - System Detection) ---
 declare -A INSTALLED_MAP
@@ -246,12 +245,12 @@ init_filter() {
     if [[ "$VIEW_MODE" == "BROWSE" ]]; then
         local i=0
         for app in "${APP_DB[@]}"; do
-            if [[ -z "$SEARCH_BUFFER" ]]; then
+            if [[ -z "$SEARCH_TERM" ]]; then
                 FILTERED_INDICES+=($i)
             else
                 local name=$(echo "$app" | cut -d'|' -f1)
                 local desc=$(echo "$app" | cut -d'|' -f2)
-                if echo "$name $desc" | grep -iq "$SEARCH_BUFFER"; then
+                if echo "$name $desc" | grep -iq "$SEARCH_TERM"; then
                     FILTERED_INDICES+=($i)
                 fi
             fi
@@ -261,11 +260,11 @@ init_filter() {
         # Library Mode
         local i=0
         for app in "${INSTALLED_LIST[@]}"; do
-            if [[ -z "$SEARCH_BUFFER" ]]; then
+            if [[ -z "$SEARCH_TERM" ]]; then
                 FILTERED_INDICES+=($i)
             else
                 local name=$(echo "$app" | cut -d'|' -f1)
-                if echo "$name" | grep -iq "$SEARCH_BUFFER"; then
+                if echo "$name" | grep -iq "$SEARCH_TERM"; then
                     FILTERED_INDICES+=($i)
                 fi
             fi
@@ -288,9 +287,9 @@ draw_header() {
     fi
     
     echo -e "${M}------------------------------------------------------------${RESET}"
-    
-    # We no longer show a separate "Search:" line here, 
-    # it is now part of the interactive footer in search mode
+    if [[ -n "$SEARCH_TERM" ]]; then
+        echo -e "${Y}Search: '${W}$SEARCH_TERM${Y}'${RESET}"
+    fi
     
     printf "${BOLD}%-4s %-22s %-10s %-30s${RESET}\n" "ID" "Name" "Type" "Status/Desc"
     echo -e "${B}------------------------------------------------------------${RESET}"
@@ -366,23 +365,12 @@ draw_list() {
 draw_footer() {
     echo -e "${M}------------------------------------------------------------${RESET}"
     echo -e "${Y}[←]${RESET} Prev  ${Y}[→]${RESET} Next  ${Y}[S]${RESET} Search  ${Y}[L]${RESET} Mode  ${Y}[Q]${RESET} Quit"
-    
-    # Conditional Footer based on Input Mode
-    if [[ "$INPUT_MODE" == "SEARCH" ]]; then
-        echo -n -e "${Y}${BOLD}Search > [ ${SEARCH_BUFFER} ]${RESET}"
+    if [[ "$VIEW_MODE" == "BROWSE" ]]; then
+        echo -e "${G}Install:${RESET} Type ID(s) then Enter"
     else
-        if [[ "$VIEW_MODE" == "BROWSE" ]]; then
-            echo -e "${G}Install:${RESET} Type ID(s) then Enter"
-        else
-            echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
-        fi
-        # Display ID input with visual braces
-        if [[ -n "$INPUT_BUFFER" ]]; then
-            echo -n -e "${BOLD}Action > [ ${INPUT_BUFFER} ]${RESET}"
-        else
-            echo -n -e "${BOLD}Action > [ ]${RESET}"
-        fi
+        echo -e "${R}Manage:${RESET} Type ID(s) to Uninstall/Update"
     fi
+    echo -n -e "${BOLD}Action > ${INPUT_BUFFER}${RESET}"
 }
 
 # --- UI HELPERS ---
@@ -561,7 +549,6 @@ install_to_path
 init_filter
 
 INPUT_BUFFER="" # Initialize buffer
-SEARCH_BUFFER="" # Search buffer
 
 while true; do
     draw_header
@@ -573,25 +560,12 @@ while true; do
     
     # Handle Escape Sequences (Arrows / Esc)
     if [[ "$key" == $'\e' ]]; then
-        # Read next 2 chars with very short timeout
         read -rsn2 -t 0.01 next
-        if [[ -z "$next" ]]; then
-            # Pure ESC key pressed
-            if [[ "$INPUT_MODE" == "SEARCH" ]]; then
-                INPUT_MODE="COMMAND"
-                SEARCH_BUFFER=""
-                SEARCH_TERM="" # Clear filter immediately
-                init_filter
-            else
-                INPUT_BUFFER="" # Clear IDs if in command mode
-            fi
-        elif [[ "$next" == "[C" ]]; then 
-            # Right Arrow
+        if [[ "$next" == "[C" ]]; then 
             total_items=${#FILTERED_INDICES[@]}
             max_page=$(( (total_items + APPS_PER_PAGE - 1) / APPS_PER_PAGE ))
             if [[ $CURRENT_PAGE -lt $max_page ]]; then ((CURRENT_PAGE++)); fi
         elif [[ "$next" == "[D" ]]; then 
-            # Left Arrow
             if [[ $CURRENT_PAGE -gt 1 ]]; then ((CURRENT_PAGE--)); fi
         fi
         continue
@@ -599,73 +573,36 @@ while true; do
 
     # Handle Enter
     if [[ -z "$key" ]]; then
-        if [[ "$INPUT_MODE" == "SEARCH" ]]; then
-            # Commit search (already updated incrementally) and switch back
-            INPUT_MODE="COMMAND"
-        else
-            if [[ -n "$INPUT_BUFFER" ]]; then
-                regex='^[0-9, ]+$'
-                if [[ "$INPUT_BUFFER" =~ $regex ]]; then
-                    IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
-                    if [[ "$VIEW_MODE" == "BROWSE" ]]; then process_install_queue "${ADDR[@]}"; else process_library_queue "${ADDR[@]}"; fi
-                    INPUT_BUFFER=""
-                    init_filter
-                else
-                    INPUT_BUFFER=""
-                fi
-            fi
-        fi
-        continue
-    fi
-
-    # Handle Backspace (127 or 8)
-    if [[ "$key" == $'\x7f' || "$key" == $'\x08' ]]; then
-        if [[ "$INPUT_MODE" == "SEARCH" ]]; then
-            if [[ -n "$SEARCH_BUFFER" ]]; then 
-                SEARCH_BUFFER="${SEARCH_BUFFER%?}"
-                SEARCH_TERM="$SEARCH_BUFFER"
-                CURRENT_PAGE=1
+        if [[ -n "$INPUT_BUFFER" ]]; then
+            regex='^[0-9, ]+$'
+            if [[ "$INPUT_BUFFER" =~ $regex ]]; then
+                IFS=',' read -ra ADDR <<< "$INPUT_BUFFER"
+                if [[ "$VIEW_MODE" == "BROWSE" ]]; then process_install_queue "${ADDR[@]}"; else process_library_queue "${ADDR[@]}"; fi
+                INPUT_BUFFER=""
                 init_filter
+            else
+                INPUT_BUFFER=""
             fi
-        else
-            if [[ -n "$INPUT_BUFFER" ]]; then INPUT_BUFFER="${INPUT_BUFFER%?}"; fi
         fi
         continue
     fi
 
-    # Input Mode: SEARCH
-    if [[ "$INPUT_MODE" == "SEARCH" ]]; then
-        # Accept printable characters
-        if [[ "$key" =~ [[:print:]] ]]; then
-            SEARCH_BUFFER+="$key"
-            SEARCH_TERM="$SEARCH_BUFFER"
-            CURRENT_PAGE=1
-            init_filter
-        fi
+    # Handle Backspace
+    if [[ "$key" == $'\x7f' || "$key" == $'\x08' ]]; then
+        if [[ -n "$INPUT_BUFFER" ]]; then INPUT_BUFFER="${INPUT_BUFFER%?}"; fi
         continue
     fi
 
-    # Input Mode: COMMAND
-    # Handle Single Key Commands (Only if not typing a number list, OR special logic)
-    
-    # Allow switching to search mode ANYTIME (even if buffer has numbers)
-    # This clears the ID buffer and switches to Search
+    # Handle Single Key Commands (If buffer has no pending numbers)
+    # We clear buffer if 's', 'l' or 'q' is pressed to handle it as command
     if [[ "$key" == "s" || "$key" == "S" ]]; then
-        INPUT_MODE="SEARCH"
         INPUT_BUFFER=""
-        SEARCH_BUFFER="" # Reset search on new entry
-        continue
-    fi
-
-    # Other commands only if buffer empty to avoid conflict with typing?
-    # Actually, we can just check if buffer is empty for 'l' and 'q' 
-    # to allow them as commands, but if buffer has numbers, maybe block?
-    # But 'q' is not a number. 'l' is not a number.
-    # So we can just check the key.
-    
-    if [[ "$key" == "l" || "$key" == "L" ]]; then
+        echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
+        read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
+    elif [[ "$key" == "l" || "$key" == "L" ]]; then
+        INPUT_BUFFER=""
         if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
-        CURRENT_PAGE=1; SEARCH_TERM=""; SEARCH_BUFFER=""; init_filter; continue
+        CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
     elif [[ "$key" == "q" || "$key" == "Q" ]]; then
         echo -e "\n${C}Goodbye!${RESET}"; exit 0
     fi
