@@ -2,9 +2,11 @@
 Alacritty|GPU-accelerated terminal emulator|snap|alacritty|--classic
 Amberol|Music Player|flatpak|io.bassi.Amberol|
 Android Studio|Android Development IDE|flatpak|com.google.AndroidStudio|
+AnyDesk|Remote Desktop Software|flatpak|com.anydesk.Anydesk|
 Ardour|Digital Audio Workstation|apt|ardour|
 Audacity|Audio editor and recorder|flatpak|org.audacityteam.Audacity|
 Bitwarden|Password Manager|snap|bitwarden|
+Bitwig Studio|Digital Audio Workstation|flatpak|com.bitwig.BitwigStudio|
 BleachBit|System Cleaner|apt|bleachbit|
 Blender|3D creation suite|snap|blender|
 BlueJ|Java IDE for beginners|apt|bluej|
@@ -12,28 +14,44 @@ Bottles|Run Windows Software|flatpak|com.usebottles.bottles|
 Boxes|Virtualization made simple|flatpak|org.gnome.Boxes|
 Brave Browser|Secure, fast & private web browser|apt-key|brave-browser|sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg && echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
 Btop|Resource Monitor|snap|btop|
+CPU-X|System profiling and monitoring|flatpak|io.github.thetumultuousunicornofdarkness.cpu-x|
 Calibre|E-book manager|apt|calibre|
 Caprine|Facebook Messenger Client|snap|caprine|
+Cawbird|Native Twitter/Mastodon client|flatpak|uk.co.ibboard.cawbird|
+Cheese|Webcam Application|apt|cheese|
 Chromium|Open Source Web Browser|apt|chromium-browser|
 Clementine|Modern music player|apt|clementine|
+CopyQ|Clipboard Manager|flatpak|com.github.hluk.copyq|
 DB Browser for SQLite|Database visualizer|apt-ppa|sqlitebrowser|ppa:linuxgndu/sqlitebrowser
+DBeaver Community|Universal Database Tool|flatpak|io.dbeaver.DBeaverCommunity|
 Darktable|Photography workflow|flatpak|org.darktable.Darktable|
+Deluge|BitTorrent Client|flatpak|org.deluge_torrent.deluge|
 Discord|All-in-one voice and text chat|snap|discord|
 Docker|Containerization platform|apt|docker.io|
 Dolphin Emulator|GameCube / Wii Emulator|flatpak|org.DolphinEmu.dolphin-emu|
+Draw.io|Diagramming and whiteboard|flatpak|com.jgraph.drawio.desktop|
+Dropbox|File Hosting Service|flatpak|com.dropbox.Client|
+Easy Effects|Audio effects for PipeWire|flatpak|com.github.wwmm.easyeffects|
 Eclipse IDE|Java IDE|snap|eclipse|--classic
 Element|Matrix Client|flatpak|im.riot.Riot|
 Emacs|An extensible, customizable text editor|snap|emacs|--classic
+Endless Sky|Space trading and combat game|flatpak|io.github.endless_sky.endless_sky|
+Evolution|Email and Calendar|flatpak|org.gnome.Evolution|
 Extension Manager|Browse/Install GNOME Extensions|flatpak|com.mattjakeman.ExtensionManager|
 FileZilla|FTP client|apt|filezilla|
 Firefox|Standard Web Browser|apt|firefox|
 Flameshot|Powerful screenshot software|apt|flameshot|
 Flatseal|Manage Flatpak Permissions|flatpak|com.github.tchx84.Flatseal|
+Foliate|E-book Reader|flatpak|com.github.johnfactotum.Foliate|
+Fragments|BitTorrent Client|flatpak|de.haeckerfelix.Fragments|
+FreeCAD|3D Parametric Modeler|flatpak|org.freecadweb.FreeCAD|
 GIMP|GNU Image Manipulation Program|flatpak|org.gimp.GIMP|
 GNOME Connector|Browser integration for extensions|apt|gnome-browser-connector|
 GNOME Shell Ext.|Standard GNOME Extensions|apt|gnome-shell-extensions|
 GParted|Partition editor|apt|gparted|
+Gaupol|Subtitle Editor|flatpak|io.otsaloma.gaupol|
 Geany|Lightweight IDE|apt|geany|
+Ghidra|Software Reverse Engineering Suite|flatpak|org.ghidra_sre.Ghidra|
 Git|Distributed version control system|apt-ppa|git|ppa:git-core/ppa
 Gnome Tweaks|Customize GNOME desktop|apt|gnome-tweaks|
 Godot 4|Game Engine|flatpak|org.godotengine.Godot|
@@ -41,76 +59,116 @@ Google Chrome|Fast, secure web browser|apt-key|google-chrome-stable|wget -q -O -
 Gufw|Firewall Config|apt|gufw|
 HandBrake|Video Transcoder|flatpak|fr.handbrake.ghb|
 Hardinfo|System Profiler and Benchmark|apt|hardinfo|
+Helix|Post-modern modal text editor|flatpak|com.helix_editor.Helix|
 Heroic Launcher|Epic Games & GOG Launcher|flatpak|com.heroicgameslauncher.hgl|
 Htop|Interactive process viewer|apt|htop|
+Hydrogen|Advanced Drum Machine|flatpak|org.hydrogenmusic.Hydrogen|
 Impression|Create bootable drives|flatpak|io.gitlab.adhami3310.Impression|
 Inkscape|Vector graphics editor (Latest)|apt-ppa|inkscape|ppa:inkscape.dev/stable
+Insomnia|API Client|snap|insomnia|
 IntelliJ IDEA Com.|Java/Kotlin IDE|snap|intellij-idea-community|--classic
 Joplin|Note taking app|flatpak|net.cozic.joplin_desktop|
 Kdenlive|Video Editor|flatpak|org.kde.kdenlive|
 KeepassXC|Password Manager|snap|keepassxc|
 Kitty|Fast, feature-rich, GPU based terminal|apt|kitty|
+Kodi|Home Theater Software|flatpak|tv.kodi.Kodi|
 Kooha|Simple screen recorder|flatpak|io.github.seadve.Kooha|
 Krita|Digital Painting|flatpak|org.kde.krita|
+LMMS|Music Production Studio|flatpak|io.lmms.LMMS|
+Lazygit|Simple terminal UI for git|snap|lazygit|--classic
 LibreOffice|Office Suite (Latest)|apt-ppa|libreoffice|ppa:libreoffice/ppa
+LibreSprite|Animated Sprite Editor|flatpak|com.github.libresprite.LibreSprite|
 LibreWolf|Privacy-focused Firefox fork|flatpak|io.gitlab.librewolf-community|
 LocalSend|AirDrop Alternative (LAN Share)|flatpak|org.localsend.LocalSend_App|
 Logseq|Privacy-first knowledge base|flatpak|com.logseq.Logseq|
+Lollypop|Modern Music Player|flatpak|org.gnome.Lollypop|
 Loupe|Fast image viewer|flatpak|org.gnome.Loupe|
 Lutris|Gaming Platform (Latest)|apt-ppa|lutris|ppa:lutris-team/lutris
 MPV|Minimalist media player|apt|mpv|
+Meld|Visual diff and merge tool|flatpak|org.gnome.Meld|
+Mindustry|Automation Tower Defense Game|flatpak|com.github.Anuken.Mindustry|
 Minecraft|Official Launcher|direct-deb|minecraft-launcher|https://launcher.mojang.com/download/Minecraft.deb
 Minetest|Open Source Voxel Game|apt-ppa|minetest|ppa:minetestdevs/stable
+Mission Center|System Resource Monitor|flatpak|io.missioncenter.MissionCenter|
+Mixxx|DJ Software|flatpak|org.mixxx.Mixxx|
 MuseScore|Music Composition|flatpak|org.musescore.MuseScore|
 Neofetch|System information tool|apt|neofetch|
 Neovim|Hyperextensible Vim-based text editor|snap|nvim|--classic
+NewsFlash|Feed Reader|flatpak|com.gitlab.newsflash|
+Nextcloud Desktop|File Synchronization|flatpak|com.nextcloud.desktopclient.nextcloud|
 Node.js (LTS)|JavaScript runtime|snap|node|--channel=lts/stable --classic
+Notepadqq|Notepad++-like editor|apt|notepadqq|
 OBS Studio|Open Broadcaster Software|apt-ppa|obs-studio|ppa:obsproject/obs-studio
 Obsidian|Knowledge Base|flatpak|md.obsidian.Obsidian|
 OnlyOffice|Office Suite|flatpak|org.onlyoffice.desktopeditors|
+OpenRA|Classic RTS Game Engine|flatpak|net.openra.OpenRA|
 OpenShot|Video Editor|apt|openshot-qt|
+OpenToonz|2D Animation Software|flatpak|io.github.morevnaproject.OpenToonz|
 Opera|Web Browser|snap|opera|
 PPSSPP|PSP Emulator|flatpak|org.ppsspp.PPSSPP|
 PeaZip|File Archiver|flatpak|io.github.peazip.PeaZip|
+Peek|Simple Animated GIF Recorder|apt|peek|
 Pika Backup|Simple backups|flatpak|org.gnome.World.PikaBackup|
+Pitivi|Video Editor|flatpak|org.pitivi.Pitivi|
+Planify|Task Manager|flatpak|io.github.alainm23.planify|
+Popsicle|USB Flasher|flatpak|com.system76.Popsicle|
 Postman|API platform for building and using APIs|snap|postman|
 Prism Launcher|Custom Minecraft Launcher|flatpak|org.prismlauncher.PrismLauncher|
 Proton VPN|High-speed secure VPN|deb-repo|proton-vpn-gnome-desktop|https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.8_all.deb
 PyCharm Community|Python IDE|snap|pycharm-community|--classic
 Python 3|Interpreted high-level programming language|apt|python3|
+QGIS|Geographic Information System|flatpak|org.qgis.qgis|
+Remmina|Remote Desktop Client|flatpak|org.remmina.Remmina|
 RetroArch|All-in-one Emulator|flatpak|org.libretro.RetroArch|
 Shotcut|Video Editor|snap|shotcut|--classic
 Shortwave|Internet radio|flatpak|de.haeckerfelix.Shortwave|
 Signal|Encrypted instant messaging|flatpak|org.signal.Signal|
+Simplenote|Note taking app|snap|simplenote|
 Skype|Video Chat|snap|skype|--classic
 Slack|Collaboration hub|snap|slack|
 Sober (Roblox)|Roblox Client (Vinegar)|flatpak|org.vinegarhq.Sober|
+Sound Juicer|Audio CD Extractor|apt|sound-juicer|
 Spotify|Music for everyone|snap|spotify|
+Spotube|Open source Spotify client|flatpak|com.github.KRTirtho.Spotube|
 Stacer|System Optimizer|apt-ppa|stacer|ppa:oguzhaninan/stacer
 Steam|Digital distribution platform|apt-universe|steam-installer|
 Stellarium|Planetarium|flatpak|org.stellarium.Stellarium|
+Strawberry|Music Player|flatpak|org.strawberrymusicplayer.strawberry|
 Stremio|Video streaming|flatpak|com.stremio.Stremio|
 Sublime Text|Sophisticated text editor|snap|sublime-text|--classic
 SuperTuxKart|Kart racing game|flatpak|net.supertuxkart.SuperTuxKart|
+Synaptic|Package Manager|apt|synaptic|
 Syncthing|Continuous File Synchronization|apt|syncthing|
 Tangram|Web apps browser|flatpak|re.sonny.Tangram|
 Teams for Linux|Unofficial Microsoft Teams|flatpak|com.github.IsmaelMartinez.teams_for_linux|
 Telegram|Messaging with a focus on speed|snap|telegram-desktop|
+Terminator|Multiple GNOME terminals in one window|apt|terminator|
 Text Editor|Simple text editor|flatpak|org.gnome.TextEditor|
 The Battle for Wesnoth|Turn-based strategy game|flatpak|org.wesnoth.Wesnoth|
 Thunderbird|Email Client|apt|thunderbird|
 Timeshift|System Restore|apt|timeshift|
 Tor Browser|Anonymity Online|flatpak|com.github.micahflee.torbrowser-launcher|
 Transmission|BitTorrent client|apt|transmission|
+Typora|Minimalist Markdown Editor|snap|typora|
+Ungoogled Chromium|Chromium without Google services|flatpak|com.github.Eloston.UngoogledChromium|
 Unity Hub|Unity Game Engine|flatpak|com.unity.UnityHub|
+Upscayl|AI Image Upscaler|flatpak|org.upscayl.Upscayl|
 VLC Media Player|The best open source media player|apt|vlc|
 VS Code|Code editing. Redefined.|apt-key|code|wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg && sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg && sudo sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list' && rm -f packages.microsoft.gpg
+Video Trimmer|Trim videos quickly|flatpak|org.gnome.gitlab.YaLTeR.VideoTrimmer|
 VirtualBox|Oracle VM VirtualBox|apt|virtualbox|
 Vivaldi|Power User Browser|apt-key|vivaldi-stable|wget -qO- https://repo.vivaldi.com/archive/linux_signing_key.pub | sudo apt-key add - && sudo add-apt-repository 'deb https://repo.vivaldi.com/archive/deb/ stable main'
+Warzone 2100|Real-time Strategy Game|flatpak|net.wz2100.wz2100|
 Weather|Show weather conditions|flatpak|org.gnome.Weather|
+WezTerm|GPU-accelerated terminal emulator|flatpak|org.wezfurlong.wezterm|
 WhatsApp for Linux|Unofficial WhatsApp Client|snap|whatsapp-for-linux|
+Wireshark|Network Protocol Analyzer|flatpak|org.wireshark.Wireshark|
+XnView MP|Image Viewer and Resizer|flatpak|com.xnview.XnViewMP|
 Xonotic|Arena shooter|flatpak|org.xonotic.Xonotic|
 Xournal++|Handwriting Notetaking|flatpak|com.github.xournalpp.xournalpp|
+Zed|High-performance code editor|flatpak|dev.zed.Zed|
+Zettlr|Markdown Editor for Researchers|flatpak|com.zettlr.Zettlr|
 Zoom|Video conferencing|flatpak|us.zoom.Zoom|
+Zotero|Reference Management|flatpak|org.zotero.Zotero|
 osu!lazer|Rhythm game|flatpak|sh.ppy.osulazer|
 qBittorrent|BitTorrent client|apt-ppa|qbittorrent|ppa:qbittorrent-team/qbittorrent-stable
