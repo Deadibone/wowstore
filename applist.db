@@ -1,3 +1,4 @@
+A|Test|apt|a|
 Chromium|Open Source Web Browser|apt|chromium-browser|
 Brave Browser|Secure, fast & private web browser|apt-key|brave-browser|sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://www.google.com/search?q=https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg && echo 'deb \[signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg\] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list
 Firefox|Standard Web Browser|apt|firefox|
