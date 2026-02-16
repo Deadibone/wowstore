@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.6"
+VERSION="2.7"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
 DB_URL="https://raw.githubusercontent.com/Deadibone/wowstore/refs/heads/main/applist.db"
@@ -545,11 +545,16 @@ load_installed
 init_filter
 
 INPUT_BUFFER="" # Initialize buffer
+NEEDS_REDRAW=true
 
 while true; do
-    draw_header
-    draw_list
-    draw_footer
+    # Redraw UI only when needed
+    if [[ "$NEEDS_REDRAW" == "true" ]]; then
+        draw_header
+        draw_list
+        draw_footer
+        NEEDS_REDRAW=false
+    fi
     
     # Check for background DB update
     if [[ -f "$LOCAL_DB_FILE" ]]; then
@@ -560,12 +565,23 @@ while true; do
             load_app_db
             load_installed # Re-check installed against new list (ids might change)
             init_filter
+            NEEDS_REDRAW=true
+            continue
         fi
     fi
     
     # Read one character silently
     # Timeout allows loop to check for background updates occasionally
     IFS= read -rsn1 -t 1 key
+    READ_STATUS=$?
+    
+    # Handle Timeout (No key pressed)
+    if [[ $READ_STATUS -ne 0 ]]; then
+        continue
+    fi
+
+    # A key was pressed, so we likely need to redraw (update buffer display or change page)
+    NEEDS_REDRAW=true
     
     # Handle Escape Sequences (Arrows / Esc)
     if [[ "$key" == $'\e' ]]; then
