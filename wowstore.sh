@@ -5,9 +5,10 @@
 # ==============================================================================
 
 # --- VERSION & UPDATE CONFIG ---
-VERSION="2.5"
+VERSION="2.6"
 # Using raw.githubusercontent to get the actual code, assuming 'main' branch
 UPDATE_URL="https://raw.githubusercontent.com/deadibone/wowstore/main/wowstore.sh"
+DB_URL="https://raw.githubusercontent.com/Deadibone/wowstore/refs/heads/main/applist.db"
 
 # --- COLORS & STYLING ---
 # Use $'' syntax to ensure escape codes are interpreted correctly by printf
@@ -22,6 +23,13 @@ BOLD=$'\033[1m'
 BG_BLUE=$'\033[44m'
 BG_MAG=$'\033[45m'
 RESET=$'\033[0m'
+
+# --- DATA STORAGE ---
+DATA_DIR="$HOME/.local/share/wowstore"
+INSTALLED_DB="$DATA_DIR/installed.db"
+LOCAL_DB_FILE="$DATA_DIR/applist.db"
+mkdir -p "$DATA_DIR"
+touch "$INSTALLED_DB"
 
 # --- ARGUMENT PARSING ---
 FORCE_UPDATE=false
@@ -96,96 +104,75 @@ install_to_path() {
 # --- CONFIGURATION ---
 APPS_PER_PAGE=10
 
-# --- APP CATALOGUE (MODULAR) ---
+# --- DATABASE MANAGEMENT ---
 declare -a APP_DB
-APP_DB=(
-    "Chromium|Open Source Web Browser|apt|chromium-browser|"
-    "Brave Browser|Secure, fast & private web browser|apt-key|brave-browser|sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg && echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list"
-    "Firefox|Standard Web Browser|apt|firefox|"
-    "LibreWolf|Privacy-focused Firefox fork|flatpak|io.gitlab.librewolf-community|"
-    "Tor Browser|Anonymity Online|flatpak|com.github.micahflee.torbrowser-launcher|"
-    "Minecraft|Official Launcher|direct-deb|minecraft-launcher|https://launcher.mojang.com/download/Minecraft.deb"
-    "Minetest|Open Source Voxel Game|apt-ppa|minetest|ppa:minetestdevs/stable"
-    "Sober (Roblox)|Roblox Client (Vinegar)|flatpak|org.vinegarhq.Sober|"
-    "Heroic Launcher|Epic Games & GOG Launcher|flatpak|com.heroicgameslauncher.hgl|"
-    "Lutris|Gaming Platform (Latest)|apt-ppa|lutris|ppa:lutris-team/lutris"
-    "Steam|Digital distribution platform|apt-universe|steam-installer|"
-    "RetroArch|All-in-one Emulator|flatpak|org.libretro.RetroArch|"
-    "PPSSPP|PSP Emulator|flatpak|org.ppsspp.PPSSPP|"
-    "Dolphin Emulator|GameCube / Wii Emulator|flatpak|org.DolphinEmu.dolphin-emu|"
-    "VS Code|Code editing. Redefined.|apt-key|code|wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg && sudo install -D -o root -g root -m 644 packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg && sudo sh -c 'echo \"deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main\" > /etc/apt/sources.list.d/vscode.list' && rm -f packages.microsoft.gpg"
-    "Sublime Text|Sophisticated text editor|snap|sublime-text|--classic"
-    "PyCharm Community|Python IDE|snap|pycharm-community|--classic"
-    "IntelliJ IDEA Com.|Java/Kotlin IDE|snap|intellij-idea-community|--classic"
-    "Android Studio|Android Development IDE|flatpak|com.google.AndroidStudio|"
-    "Unity Hub|Unity Game Engine|flatpak|com.unity.UnityHub|"
-    "Godot 4|Game Engine|flatpak|org.godotengine.Godot|"
-    "Postman|API platform for building and using APIs|snap|postman|"
-    "Docker|Containerization platform|apt|docker.io|"
-    "Git|Distributed version control system|apt-ppa|git|ppa:git-core/ppa"
-    "Node.js (LTS)|JavaScript runtime|snap|node|--channel=lts/stable --classic"
-    "Python 3|Interpreted high-level programming language|apt|python3|"
-    "DB Browser for SQLite|Database visualizer|apt-ppa|sqlitebrowser|ppa:linuxgndu/sqlitebrowser"
-    "Extension Manager|Browse/Install GNOME Extensions|flatpak|com.mattjakeman.ExtensionManager|"
-    "GNOME Shell Ext.|Standard GNOME Extensions|apt|gnome-shell-extensions|"
-    "GNOME Connector|Browser integration for extensions|apt|gnome-browser-connector|"
-    "Gnome Tweaks|Customize GNOME desktop|apt|gnome-tweaks|"
-    "Flatseal|Manage Flatpak Permissions|flatpak|com.github.tchx84.Flatseal|"
-    "Amberol|Music Player|flatpak|io.bassi.Amberol|"
-    "Bottles|Run Windows Software|flatpak|com.usebottles.bottles|"
-    "Boxes|Virtualization made simple|flatpak|org.gnome.Boxes|"
-    "Kooha|Simple screen recorder|flatpak|io.github.seadve.Kooha|"
-    "Loupe|Fast image viewer|flatpak|org.gnome.Loupe|"
-    "Pika Backup|Simple backups|flatpak|org.gnome.World.PikaBackup|"
-    "Impression|Create bootable drives|flatpak|io.gitlab.adhami3310.Impression|"
-    "Shortwave|Internet radio|flatpak|de.haeckerfelix.Shortwave|"
-    "Tangram|Web apps browser|flatpak|re.sonny.Tangram|"
-    "Text Editor|Simple text editor|flatpak|org.gnome.TextEditor|"
-    "Weather|Show weather conditions|flatpak|org.gnome.Weather|"
-    "Discord|All-in-one voice and text chat|snap|discord|"
-    "Telegram|Messaging with a focus on speed|snap|telegram-desktop|"
-    "Signal|Encrypted instant messaging|flatpak|org.signal.Signal|"
-    "Slack|Collaboration hub|snap|slack|"
-    "Zoom|Video conferencing|flatpak|us.zoom.Zoom|"
-    "Element|Matrix Client|flatpak|im.riot.Riot|"
-    "Teams for Linux|Unofficial Microsoft Teams|flatpak|com.github.IsmaelMartinez.teams_for_linux|"
-    "Thunderbird|Email Client|apt|thunderbird|"
-    "LibreOffice|Office Suite (Latest)|apt-ppa|libreoffice|ppa:libreoffice/ppa"
-    "OnlyOffice|Office Suite|flatpak|org.onlyoffice.desktopeditors|"
-    "Obsidian|Knowledge Base|flatpak|md.obsidian.Obsidian|"
-    "Logseq|Privacy-first knowledge base|flatpak|com.logseq.Logseq|"
-    "Joplin|Note taking app|flatpak|net.cozic.joplin_desktop|"
-    "LocalSend|AirDrop Alternative (LAN Share)|flatpak|org.localsend.LocalSend_App|"
-    "Proton VPN|High-speed secure VPN|deb-repo|proton-vpn-gnome-desktop|https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.8_all.deb"
-    "VLC Media Player|The best open source media player|apt|vlc|"
-    "MPV|Minimalist media player|apt|mpv|"
-    "Spotify|Music for everyone|snap|spotify|"
-    "GIMP|GNU Image Manipulation Program|flatpak|org.gimp.GIMP|"
-    "Krita|Digital Painting|flatpak|org.kde.krita|"
-    "Inkscape|Vector graphics editor (Latest)|apt-ppa|inkscape|ppa:inkscape.dev/stable"
-    "Blender|3D creation suite|snap|blender|"
-    "OBS Studio|Open Broadcaster Software|apt-ppa|obs-studio|ppa:obsproject/obs-studio"
-    "Kdenlive|Video Editor|flatpak|org.kde.kdenlive|"
-    "Audacity|Audio editor and recorder|flatpak|org.audacityteam.Audacity|"
-    "HandBrake|Video Transcoder|flatpak|fr.handbrake.ghb|"
-    "Darktable|Photography workflow|flatpak|org.darktable.Darktable|"
-    "Clementine|Modern music player|apt|clementine|"
-    "Stremio|Video streaming|flatpak|com.stremio.Stremio|"
-    "Htop|Interactive process viewer|apt|htop|"
-    "Neofetch|System information tool|apt|neofetch|"
-    "GParted|Partition editor|apt|gparted|"
-    "Stacer|System Optimizer|apt-ppa|stacer|ppa:oguzhaninan/stacer"
-    "BleachBit|System Cleaner|apt|bleachbit|"
-    "Timeshift|System Restore|apt|timeshift|"
-    "VirtualBox|Oracle VM VirtualBox|apt|virtualbox|"
-    "FileZilla|FTP client|apt|filezilla|"
-    "qBittorrent|BitTorrent client|apt-ppa|qbittorrent|ppa:qbittorrent-team/qbittorrent-stable"
-    "Transmission|BitTorrent client|apt|transmission|"
-)
+DB_LAST_LOADED=0
 
-# --- SORTING APP DB ---
-IFS=$'\n' APP_DB=($(sort -f -t'|' -k1 <<<"${APP_DB[*]}"))
-unset IFS
+load_app_db() {
+    APP_DB=()
+    
+    if [[ -f "$LOCAL_DB_FILE" ]]; then
+        while read -r line; do
+            # Remove CR/LF
+            line=$(echo "$line" | tr -d '\r')
+            # Strip surrounding quotes if present (e.g. "Name|Desc")
+            line="${line%\"}"
+            line="${line#\"}"
+            
+            # Skip empty lines or comments
+            if [[ -z "$line" || "$line" == \#* ]]; then continue; fi
+            
+            APP_DB+=("$line")
+        done < "$LOCAL_DB_FILE"
+        
+        # Sort alphabetically
+        if [ ${#APP_DB[@]} -gt 0 ]; then
+            IFS=$'\n' APP_DB=($(sort -f -t'|' -k1 <<<"${APP_DB[*]}"))
+            unset IFS
+        fi
+        
+        # Update timestamp tracking
+        DB_LAST_LOADED=$(date +%s)
+    else
+        # Fallback if no file exists yet
+        APP_DB=(
+            "Chromium|Open Source Web Browser|apt|chromium-browser|"
+            "Firefox|Standard Web Browser|apt|firefox|"
+        )
+    fi
+}
+
+fetch_db_background() {
+    # This runs in background
+    (
+        local temp_db="${LOCAL_DB_FILE}.tmp"
+        # Download with cache busting
+        if wget -q -O "$temp_db" "${DB_URL}?t=$(date +%s)"; then
+            if [ -s "$temp_db" ]; then
+                mv "$temp_db" "$LOCAL_DB_FILE"
+            else
+                rm "$temp_db"
+            fi
+        fi
+    ) &
+}
+
+fetch_db_foreground() {
+    echo -e "${C}Downloading App Database...${RESET}"
+    local temp_db="${LOCAL_DB_FILE}.tmp"
+    if wget -O "$temp_db" "${DB_URL}?t=$(date +%s)"; then
+        if [ -s "$temp_db" ]; then
+            mv "$temp_db" "$LOCAL_DB_FILE"
+            echo -e "${G}Database updated.${RESET}"
+        else
+            rm "$temp_db"
+            echo -e "${R}Downloaded database was empty.${RESET}"
+        fi
+    else
+        echo -e "${R}Failed to download database. Using fallback.${RESET}"
+    fi
+    sleep 1
+}
 
 # --- GLOBAL VARIABLES & STATE ---
 CURRENT_PAGE=1
@@ -239,7 +226,6 @@ load_installed() {
 }
 
 # --- INITIALIZATION ---
-load_installed
 init_filter() {
     FILTERED_INDICES=()
     if [[ "$VIEW_MODE" == "BROWSE" ]]; then
@@ -546,6 +532,16 @@ process_library_queue() {
 check_dependencies
 self_update
 install_to_path
+
+# Load Database
+if [[ ! -f "$LOCAL_DB_FILE" ]]; then
+    fetch_db_foreground
+else
+    fetch_db_background
+fi
+load_app_db
+# Load initial installed state
+load_installed
 init_filter
 
 INPUT_BUFFER="" # Initialize buffer
@@ -555,8 +551,21 @@ while true; do
     draw_list
     draw_footer
     
+    # Check for background DB update
+    if [[ -f "$LOCAL_DB_FILE" ]]; then
+        # Get modification time
+        CURRENT_MOD=$(date -r "$LOCAL_DB_FILE" +%s)
+        if [[ $CURRENT_MOD -gt $DB_LAST_LOADED ]]; then
+            # Reload quietly if update happened
+            load_app_db
+            load_installed # Re-check installed against new list (ids might change)
+            init_filter
+        fi
+    fi
+    
     # Read one character silently
-    IFS= read -rsn1 key
+    # Timeout allows loop to check for background updates occasionally
+    IFS= read -rsn1 -t 1 key
     
     # Handle Escape Sequences (Arrows / Esc)
     if [[ "$key" == $'\e' ]]; then
@@ -594,17 +603,16 @@ while true; do
     fi
 
     # Handle Single Key Commands (If buffer has no pending numbers)
-    # We clear buffer if 's', 'l' or 'q' is pressed to handle it as command
-    if [[ "$key" == "s" || "$key" == "S" ]]; then
-        INPUT_BUFFER=""
-        echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
-        read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
-    elif [[ "$key" == "l" || "$key" == "L" ]]; then
-        INPUT_BUFFER=""
-        if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
-        CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
-    elif [[ "$key" == "q" || "$key" == "Q" ]]; then
-        echo -e "\n${C}Goodbye!${RESET}"; exit 0
+    if [[ -z "$INPUT_BUFFER" ]]; then
+        if [[ "$key" == "s" || "$key" == "S" ]]; then
+            echo -e "\n\n${C}Enter search term (leave empty to reset):${RESET}"
+            read -r term; SEARCH_TERM="$term"; CURRENT_PAGE=1; init_filter; continue
+        elif [[ "$key" == "l" || "$key" == "L" ]]; then
+            if [[ "$VIEW_MODE" == "BROWSE" ]]; then VIEW_MODE="LIBRARY"; else VIEW_MODE="BROWSE"; fi
+            CURRENT_PAGE=1; SEARCH_TERM=""; init_filter; continue
+        elif [[ "$key" == "q" || "$key" == "Q" ]]; then
+            echo -e "\n${C}Goodbye!${RESET}"; exit 0
+        fi
     fi
 
     # Handle Digits, Comma, Space (Input Buffer)
